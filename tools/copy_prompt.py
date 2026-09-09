@@ -22,10 +22,14 @@ RECIPES = {
     "D": "配方D_逻辑漏洞工作坊.md",
     "E": "配方E_周度沉淀.md",
     "F": "配方F_白盒研判.md",
+    "R": "配方R_单漏洞复利.md",
     "P": "配方P_提示词分发员.md",
+    "WZ": "配方WZ_网站流程.md",
+    "XCX": "配方XCX_小程序流程.md",
+    "APP": "配方APP_App流程.md",
     "Z": "配方Z_全流程验收.md",
 }
-ALIASES = {"1": "A", "2": "B", "3": "C", "4": "D", "5": "E", "6": "F", "7": "P"}
+ALIASES = {"1": "A", "2": "B", "3": "C", "4": "D", "5": "E", "6": "F", "7": "P", "8": "WZ", "9": "XCX", "10": "Z", "11": "R", "12": "APP"}
 
 
 def rec_files():
@@ -34,7 +38,7 @@ def rec_files():
 
 
 def list_recipes():
-    for key in "ABCDEFPZ":
+    for key in ("A", "B", "C", "D", "E", "F", "R", "WZ", "XCX", "APP", "P", "Z"):
         path = os.path.join(rec_files(), RECIPES[key])
         if os.path.exists(path):
             with open(path, "r", encoding="utf-8-sig") as handle:
@@ -60,7 +64,7 @@ def copy_to_clipboard(text):
 def main():
     args = sys.argv[1:]
     if not args or args[0] in ("-h", "--help"):
-        print("usage: python copy_prompt.py <A-F/Z|1-6> | --list")
+        print("usage: python copy_prompt.py <A-F/R/P/WZ/XCX/APP/Z|1-12> | --list\nP is the recommended unified workflow router; R is the single-finding learning loop; WZ, XCX and APP are direct shortcuts.")
         list_recipes()
         return 0
     if args[0] == "--list":

@@ -68,6 +68,16 @@ workflows:
     - path: .agents/skills/xcx/references/test-matrix.md
       purpose: 测试矩阵
       required: true
+  app:
+    - path: .agents/skills/app/SKILL.md
+      purpose: APP 流程主规则
+      required: true
+    - path: .agents/skills/app/references/workflow.md
+      purpose: 阶段定义与游标
+      required: true
+    - path: .agents/skills/app/references/test-matrix.md
+      purpose: 测试矩阵（MASTG 锚点，见施工方案附录 G）
+      required: true
 
 phases:
   api_inventory_reconciliation:
@@ -223,6 +233,73 @@ phases:
       required: false
     - path: tests/test_sbom_inventory.py
       purpose: SBOM 清单行为锁定测试（batch16_5；当前 phase 只加载相关域）
+      required: false
+  app_package_analysis:
+    - path: .agents/skills/app/references/package-analysis.md
+      purpose: "APK/IPA 解包分支与加固识别规则（含加固特征表）；壳包默认 blocked，不自动脱壳"
+      required: true
+  app_hardening:
+    - path: contracts/app_storage_package_schema.json
+      purpose: 包完整性/加固/热更新信任契约分支（hardening 七分支）
+      required: false
+  app_auth:
+    - path: contracts/app_auth_schema.json
+      purpose: APP 认证态契约（三 phase/分支/产物路径/形状/红线）
+      required: false
+    - path: src/authorized_assessment/app/platform_login_exchange.py
+      purpose: "App 平台登录交换复核域（OAuth/一键登录/设备绑定）；必需性: false"
+      required: false
+    - path: src/authorized_assessment/app/session_token_lifecycle.py
+      purpose: 会话 token 生命周期复核域（复用共享引擎模式）
+      required: false
+    - path: src/authorized_assessment/app/signature_replay_review.py
+      purpose: 签名重放离线复核域（不自动重放任何请求）
+      required: false
+    - path: tests/test_app_contract_sync.py
+      purpose: app 契约↔引擎↔种子三处同源锁定测试
+      required: false
+  app_storage_package:
+    - path: contracts/app_storage_package_schema.json
+      purpose: 本地数据/密码学/加固契约
+      required: false
+    - path: src/authorized_assessment/app/local_data_exposure.py
+      purpose: 本地数据暴露复核域（android/ios 平台列）
+      required: false
+    - path: src/authorized_assessment/app/crypto_secret_review.py
+      purpose: 密码学与密钥处理复核域（secret_candidate 红线）
+      required: false
+  app_reconciliation:
+    - path: contracts/app_reconciliation_schema.json
+      purpose: 静态/动态端点对账契约（五分支/十值端点状态）
+      required: false
+    - path: src/authorized_assessment/app/static_dynamic_reconciliation.py
+      purpose: 离线对账复核域（不发新请求）
+      required: false
+  app_webview_ipc:
+    - path: contracts/app_webview_schema.json
+      purpose: WebView/Bridge/Deep Link 契约（三 CSV）
+      required: false
+    - path: contracts/app_ipc_schema.json
+      purpose: exported 组件/URL Scheme/Universal Link 契约（两 CSV）
+      required: false
+    - path: src/authorized_assessment/app/webview_bridge_review.py
+      purpose: webview 三清单复核域
+      required: false
+    - path: src/authorized_assessment/app/ipc_component_review.py
+      purpose: IPC 组件清单复核域
+      required: false
+  app_cloud:
+    - path: contracts/app_cloud_schema.json
+      purpose: 云函数/对象存储/第三方 SDK 边界契约
+      required: false
+    - path: src/authorized_assessment/app/cloud_function_review.py
+      purpose: 云函数复核域（最小读验证）
+      required: false
+    - path: src/authorized_assessment/app/cloud_storage_review.py
+      purpose: 对象存储 ACL 复核域
+      required: false
+    - path: src/authorized_assessment/app/third_party_boundary_review.py
+      purpose: 第三方 SDK/平台边界复核域
       required: false
 
 historical_data:

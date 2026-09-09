@@ -57,7 +57,7 @@ python .\gov_exercise_runner.py --targets <目标文件> --probe --fingerprint
 | 测试 | `tests/` | 当前平铺布局有稳定导入约定，暂不移动 |
 | 本地靶场 | `labs/` | 只用于本地教学和判据校准 |
 | AI 配方 | `prompts/` | `tools/copy_prompt.py` 依赖该路径 |
-| Skill | `.agents/skills/` | canonical；`.claude` 和 `.opencode` 是镜像 |
+| Skill | `.agents/skills/` | canonical（工作流 skill：wz/xcx/app/fh）；`.claude` 和 `.opencode` 是镜像 |
 | 旧兼容代码 | `legacy/compatibility/` | 不作为默认主流程 |
 | 高风险/实验代码 | `legacy/unsafe/`、`legacy/archived/` | 必须遵守审批门和授权边界 |
 

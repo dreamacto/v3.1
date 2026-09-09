@@ -14,8 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 MAP_PATH = ROOT / "docs" / "CONTEXT_LOADING_MAP.yaml"
 
 REQUIRED_GLOBAL_ALWAYS = ["AGENTS.md", "ROE.md", "runtime/policy_snapshot.json"]
-REQUIRED_WORKFLOWS = ["fh", "wz", "xcx"]
-REQUIRED_PHASES = ["api_inventory_reconciliation", "api_resource_controls", "third_party_api_review", "graphql", "injection", "miniapp_auth", "miniapp_storage_package", "miniapp_reconciliation", "miniapp_cloud", "miniapp_webview", "directory_candidates", "xss_single_candidate_validation", "passive_subdomain_discovery", "static_analysis_whitebox", "sbom_inventory"]
+REQUIRED_WORKFLOWS = ["fh", "wz", "xcx", "app"]
+REQUIRED_PHASES = ["api_inventory_reconciliation", "api_resource_controls", "third_party_api_review", "graphql", "injection", "miniapp_auth", "miniapp_storage_package", "miniapp_reconciliation", "miniapp_cloud", "miniapp_webview", "directory_candidates", "xss_single_candidate_validation", "passive_subdomain_discovery", "static_analysis_whitebox", "sbom_inventory", "app_package_analysis", "app_hardening", "app_auth", "app_storage_package", "app_reconciliation", "app_webview_ipc", "app_cloud"]
 HISTORY_TASK_TYPES = ["review", "planning", "precision_analysis"]
 REQUIRED_NEVER_LOAD_PATTERNS = [
     "runs/*/reports/*draft*",

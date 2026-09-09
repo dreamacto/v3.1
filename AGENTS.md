@@ -27,7 +27,8 @@
 | D:\Desktop\一键已有子域名后流程_含弱口令.bat | 已有子域名清单，从活性/指纹阶段接着跑 |
 | D:\Desktop\一键保守全流程_尽量多信息_避WAF.bat | 保守模式：低速、尽量避开 WAF 触发 |
 | D:\Desktop\SQLi会话探测.bat | SQLi 三合一探测（预算 16/参数、基线差分、marker） |
-| D:\Desktop\AI配方_一键复制.bat | 菜单 1-7（A-F/P） 复制 prompts/ 配方全文到剪贴板，粘贴给任意 AI 启动对应会话 |
+| D:\Desktop\AI配方_一键复制.bat | 菜单 1-12 复制 prompts/ 配方A-F/P/R/WZ/XCX/APP/Z；P 为统一流程路由入口，WZ/XCX/APP 为直接快捷入口 |
+| prompts\配方APP_App流程.md | APP 移动应用流程（APK/IPA/XAPK/包名/市场链接/解包目录/抓包流量）直接入口；桌面 AI配方 菜单 12 |
 | D:\Desktop\一键IDOR差分_只读.bat | 越权差分：输入 run 目录/会话文件/端点文件，跑 idor_triage.py（只读） |
 | D:\Desktop\一键竞态靶场.bat | 本地起竞态靶场（8892）：/claim 漏洞真值 /claim_safe 负例，判据校准教学 |
 | D:\Desktop\一键竞态测试_授权目标.bat | 读 race_config.json 对授权目标跑竞态（开场 YES 确认；写端点需 ack） |
@@ -36,6 +37,7 @@
 | runs\<ts>\00_重要_人工复核入口\README_先看这里.md | 跑完第一步：读队列说明（01_重要_Cookie、02_业务API只读确认项、04C_XSS反射候选 等编号队列） |
 | engagements\<目标名-日期>\ | wz/xcx 深挖工作区：phase_status.json 游标 + review_ledger.csv 台账（L 编号）+ notes\ 各阶段记录 + artifacts\ 证据；复核/规划/度量会话都要读它，别只看 runs\ |
 | python run_lifecycle.py runs\<ts> | 查询 run 完成态（scan/复核/规划/轻量穷尽/沉淀），回答"跑完了吗/下一步是什么"；验收用 prompts\配方Z_全流程验收.md |
+| launchers\全目标作战台.bat（根目录同名转发；桌面也有同名转发） | 跨 engagement 状态板（只读聚合，scripts\reporting\engagement_board.py）：双流程游标/进度/闲置天数/待操作员任务/台账闭环；写入 engagements\_BOARD.md；子命令 --tasks 全部待办、--runs 最近 run 复核态、--focus \<名称> 单目标深看、--handoff \<名称> 交接骨架、--submit \<名称> SRC 提交草稿、--assets 跨目标资产对账、--json 供 AI 会话开场读盘 |
 
 ## 上下文纪律（6 条硬约束）
 
@@ -63,7 +65,7 @@
   - tool_strategy.json —— 34 个 phase 的主备工具映射 + approval_gated_phases
   - AGENT_MANIFEST.md —— 机器可读工具清单（由 scripts/gen_agent_manifest.py 生成，勿手改）
   - ROE.md —— 交战规则（授权边界/速率/动作分级/凭证纪律）
-  - prompts\ —— 会话配方 A-F（AI配方_一键复制.bat 复制到剪贴板）
-  - .claude\skills\{wz,xcx,fh}\ —— 三个工作流 skill（单会话单阶段执行）
+  - prompts\ —— 会话配方 A-F、P、WZ、XCX、APP、Z（AI配方_一键复制.bat 直接复制）
+  - .claude\skills\{wz,xcx,app,fh}\ —— 四个工作流 skill（单会话单阶段执行）
   - .agents\skills\authorized-pentest-workflow\ —— 授权边界
-- 施工中（后续版本挂载）：无（W1-W4 已落地，W5+ 按 CONSTRUCTION_STATUS.md 推进）。
+- 施工中（后续版本挂载）：APP 第三流程（W16-W21 = 批次 B1-B9，按 CONSTRUCTION_STATUS.md 推进；蓝图 docs/APP_WORKFLOW_CONSTRUCTION_PLAN.md，验收记录 docs/APP_CONSTRUCTION_ACCEPTANCE.md）。

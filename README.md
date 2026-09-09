@@ -39,7 +39,7 @@ runs\<本轮目录>\00_重要_人工复核入口\README_先看这里.md
 ```
 
 - 复核收尾推荐：`python fh_review_dispatch.py --run-dir <run目录> --recommend --top 5` → 生成 `postrun_review\深挖推荐.md`
-- 提示词分发员：桌面 `AI配方_一键复制.bat` 按 7（配方 P），把提示词粘到一个专职新会话——以后跑完一键流程/要开单目标/要测小程序，都到那个会话拿开工提示词。
+- 桌面 `AI配方_一键复制.bat` 现在直接复制 WZ 网站流程、XCX 小程序流程或 APP 移动应用流程；配方 P 现为统一评估流程路由器；WZ/XCX/APP 同时提供直接快捷入口。
 
 ## 输出怎么读
 
@@ -63,6 +63,8 @@ runs\<本轮目录>\targets_with_auto_subdomains.txt
 ## 安全边界
 
 - 默认只做低频、只读、元数据级检查。
+- 已明确登记为**域级授权根域**的目标（例如 `abc.com`）可自动覆盖合法子域（例如 `123.abc.com`）；精确子域、兄弟域、`evilabc.com`、`abc.com.evil.com`、第三方/平台共享 host 不会自动纳入。
+- 自动纳入只解决 scope 继承，仍必须通过当前 engagement 的授权和 active-testing 门；`targets_with_auto_subdomains.txt` 不能绕过 policy gate。
 - Cookie、Token、响应正文、敏感字段值不写入报告素材。
 - 弱口令只有显式流程才会跑，并且低频、少量、遇到验证码/锁定/告警就停。
 - 上传、SQLMap、RCE、反序列化、Shiro key 爆破、文件下载/导出、批量枚举、改删数据都需要演练规则明确允许后再单目标执行。

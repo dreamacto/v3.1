@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0",
+  "construction_table": "09",
+  "worker_type": "Code Worker",
+  "status": "complete",
+  "handoff_ready": true,
+  "facts": {
+    "head": "2ad1cc4e6b32f3b8a43549dc1375b9528ff4d1fa",
+    "file_counts": {
+      "construction_records": 45,
+      "contracts": 15,
+      "sources": 69,
+      "root_entries": 4,
+      "related_tests": 58,
+      "matrix_rows": 191
+    },
+    "all_json_records_valid": true,
+    "full_pytest": "1485 passed",
+    "focused_architecture": "189 passed",
+    "compile_import": "65/65 pass"
+  },
+  "commands": [
+    "git status --short",
+    "git log --date=iso --pretty=format:%h %ad %s -n 30",
+    "git show --stat --oneline HEAD",
+    "git ls-tree -r --name-only HEAD",
+    "git show <00-08 commit> --stat",
+    "PYTHONPATH=src python -m compileall",
+    "PYTHONPATH=src python -m pytest -q",
+    "scripts/maintenance/validate_run_contracts.py --json",
+    "scripts/verify_offline.py --json"
+  ],
+  "security": {
+    "network_requests": 0,
+    "real_targets_read": 0,
+    "credentials_sessions_har_raw_read": 0,
+    "runs_engagements_read": 0,
+    "approval_gated_actions_executed": 0
+  },
+  "compatibility": "legacy/shadow/readonly/active-approved gates covered; active positive dispatch not executed",
+  "side_effects": "No network, real target, credentials, sensitive output, or approval-gated action; only local test temporary artifacts may be produced.",
+  "file_matrix_ref": "09_acceptance_record.json#file_matrix"
+}

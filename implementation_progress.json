@@ -1,0 +1,372 @@
+{
+  "schema_version": "1.0",
+  "mode": "unattended_quality_first",
+  "current_batch": "batch_17",
+  "current_item": "project_complete_overall_pass",
+  "completed_items": [
+    "batch0_0_rule_precedence_and_context_schema",
+    "batch0_1_context_loading_map",
+    "batch0_2_policy_snapshot",
+    "batch0_3_context_loader",
+    "batch0_4_context_snapshot",
+    "batch0_5_context_loading_tests",
+    "batch0_6_batch0_summary_acceptance",
+    "batch1_0_state_model_and_run_quality_gate",
+    "batch1_1_run_lifecycle_path_and_review_aggregated_gate",
+    "batch1_2_report_lifecycle_states",
+    "batch1_3_coverage_and_health_score_fix",
+    "batch1_4_validate_run_contracts_entry",
+    "batch1_5_batch1_summary_acceptance",
+    "batch2_0_finding_quality_gate_contract_and_module",
+    "batch2_1_platform_severity_mapping_and_suppression",
+    "batch2_2_evidence_gate",
+    "batch2_3_validate_finding_quality_entry",
+    "batch2_4_batch2_summary_acceptance",
+    "batch3_0_candidate_baseline_and_fixed_path_denoise",
+    "batch3_1_canonical_keys_and_candidate_identity_contract",
+    "batch3_2_candidate_dedup_engine",
+    "batch3_3_candidate_identity_contract_wiring",
+    "batch3_4_batch3_summary_acceptance",
+    "batch4_0_tool_registry_contract_and_inventory",
+    "batch4_1_rebuild_tool_inventory_entry_and_readme",
+    "batch4_2_tool_strategy_cross_check_negative",
+    "batch4_3_runtime_inventory_min_fields",
+    "batch4_4_launcher_python_unification",
+    "batch4_5_batch4_summary_acceptance",
+    "batch5_0_coverage_matrix_backbone",
+    "batch5_1_application_mapping_skill_subphases",
+    "batch5_2_tool_strategy_application_mapping_entry",
+    "batch5_3_batch5_summary_acceptance",
+    "batch6_0_injection_candidate_contract_and_module",
+    "batch6_1_injection_and_parser_deserialization_screening",
+    "batch6_2_ssrf_candidate_screening_and_strategy_entry",
+    "batch6_3_batch6_summary_acceptance",
+    "batch6_4_operator_revision_seven_items",
+    "batch7_0_graphql_contract_inventory_and_review",
+    "batch7_1_websocket_inventory_and_review",
+    "batch7_2_browser_boundary_review",
+    "batch7_3_file_path_candidate_screening",
+    "batch7_4_batch7_summary_acceptance",
+    "batch8_0_api_inventory_reconcile",
+    "batch8_1_api_resource_controls",
+    "batch8_2_third_party_api_review",
+    "batch8_3_graphql_websocket_orchestration_boundary",
+    "batch8_4_batch8_summary_acceptance",
+    "batch8_5_operator_review_decisions",
+    "batch8_6_tool_strategy_orchestration_only",
+    "batch8_7_object_field_authorization_substatus",
+    "batch8_8_subdomain_import_purification",
+    "batch8_9_context_loading_map_expansion",
+    "batch8_10_reconciliation_contract_and_versioned_definitions",
+    "batch8_11_batch8_summary_reacceptance",
+    "batch9_0_state_machine_reconstruction",
+    "batch9_1_replay_duplicate_screening",
+    "batch9_2_race_hypothesis",
+    "batch9_3_batch9_summary_acceptance",
+    "batch10_0_xcx_auth_phase_split",
+    "batch10_1_platform_login_exchange",
+    "batch10_2_session_token_lifecycle",
+    "batch10_3_signature_replay_review",
+    "batch10_4_strategy_context_manifest_sync",
+    "batch10_5_batch10_summary_acceptance",
+    "batch11_0_xcx_storage_package_phase_split",
+    "batch11_1_package_integrity_update",
+    "batch11_2_local_data_exposure",
+    "batch11_3_crypto_secret_review",
+    "batch11_4_strategy_context_manifest_sync",
+    "batch11_5_batch11_summary_acceptance",
+    "batch12_0_cloud_reconciliation_phase_split",
+    "batch12_1_static_dynamic_reconciliation_module",
+    "batch12_2_cloud_function_review_module",
+    "batch12_3_cloud_storage_review_module",
+    "batch12_4_third_party_boundary_review_module",
+    "batch12_5_strategy_context_contract_manifest_sync",
+    "batch13_0_current_state_review_and_design_card",
+    "batch13_1_init_audit_artifact_shapes",
+    "batch13_2_miniapp_webview_contract",
+    "batch13_3_skill_references_webview_sync",
+    "batch13_4_strategy_context_validator_manifest_sync",
+    "batch13_5_batch13_summary_acceptance",
+    "batch14_0_current_state_review_and_design_card",
+    "batch14_1_b2_mirror_line_ending_fix_and_test_exception_collapse",
+    "batch14_2_health_scope_import_purity_fix",
+    "batch14_3_prompt_skill_rule_sync",
+    "batch14_4_fh_chain_spec8_sync",
+    "batch14_5_batch14_summary_acceptance_and_b2_resolution",
+    "batch15_0_current_state_review_and_schema_design",
+    "batch15_1_review_feedback_contract_and_ingest",
+    "batch15_2_precision_model_and_candidate_consumption",
+    "batch15_3_review_memory_rebuild",
+    "batch15_4_run_identity_hash_producer",
+    "batch15_5_run_dedup_gate",
+    "batch16_0_current_state_review_and_design_card",
+    "batch16_1_ffuf_directory_candidate_capability",
+    "batch16_2_single_candidate_xss_validation",
+    "batch16_3_passive_subdomain_candidates",
+    "batch16_4_static_analysis_signals",
+    "batch16_5_offline_sbom_inventory",
+    "batch16_6_registry_strategy_manifest_context_sync",
+    "batch16_7_batch16_summary_acceptance",
+    "batch17_0_current_state_review_and_acceptance_plan",
+    "batch17_1_final_acceptance_command_suite",
+    "batch17_2_completion_definition_and_negative_coverage_audit",
+    "batch17_3_final_report",
+    "batch17_4_b5_cleared_bare_command_reacceptance"
+  ],
+  "pending_items": [],
+  "blocked_items": [],
+  "batch_results": [
+    {
+      "batch": "batch_0",
+      "status": "passed",
+      "finished_at": "2026-08-29T10:20:00+08:00",
+      "subitems": {
+        "batch0_0_rule_precedence_and_context_schema": "passed",
+        "batch0_1_context_loading_map": "passed",
+        "batch0_2_policy_snapshot": "passed",
+        "batch0_3_context_loader": "passed",
+        "batch0_4_context_snapshot": "passed",
+        "batch0_5_context_loading_tests": "passed",
+        "batch0_6_batch0_summary_acceptance": "passed"
+      }
+    },
+    {
+      "batch": "batch_1",
+      "status": "passed",
+      "finished_at": "2026-08-29T12:10:00+08:00",
+      "subitems": {
+        "batch1_0_state_model_and_run_quality_gate": "passed",
+        "batch1_1_run_lifecycle_path_and_review_aggregated_gate": "passed",
+        "batch1_2_report_lifecycle_states": "passed",
+        "batch1_3_coverage_and_health_score_fix": "passed",
+        "batch1_4_validate_run_contracts_entry": "passed",
+        "batch1_5_batch1_summary_acceptance": "passed"
+      }
+    },
+    {
+      "batch": "batch_2",
+      "status": "passed",
+      "finished_at": "2026-08-29T15:40:00+08:00",
+      "subitems": {
+        "batch2_0_finding_quality_gate_contract_and_module": "passed",
+        "batch2_1_platform_severity_mapping_and_suppression": "passed",
+        "batch2_2_evidence_gate": "passed",
+        "batch2_3_validate_finding_quality_entry": "passed",
+        "batch2_4_batch2_summary_acceptance": "passed"
+      }
+    },
+    {
+      "batch": "batch_3",
+      "status": "passed",
+      "finished_at": "2026-08-29T14:10:00+08:00",
+      "subitems": {
+        "batch3_0_candidate_baseline_and_fixed_path_denoise": "passed",
+        "batch3_1_canonical_keys_and_candidate_identity_contract": "passed",
+        "batch3_2_candidate_dedup_engine": "passed",
+        "batch3_3_candidate_identity_contract_wiring": "passed",
+        "batch3_4_batch3_summary_acceptance": "passed"
+      }
+    },
+    {
+      "batch": "batch_4",
+      "status": "passed",
+      "finished_at": "2026-08-29T18:20:00+08:00",
+      "subitems": {
+        "batch4_0_tool_registry_contract_and_inventory": "passed",
+        "batch4_1_rebuild_tool_inventory_entry_and_readme": "passed",
+        "batch4_2_tool_strategy_cross_check_negative": "passed",
+        "batch4_3_runtime_inventory_min_fields": "passed",
+        "batch4_4_launcher_python_unification": "passed",
+        "batch4_5_batch4_summary_acceptance": "passed"
+      }
+    },
+    {
+      "batch": "batch_5",
+      "status": "passed",
+      "finished_at": "2026-08-29T21:05:00+08:00",
+      "subitems": {
+        "batch5_0_coverage_matrix_backbone": "passed",
+        "batch5_1_application_mapping_skill_subphases": "passed",
+        "batch5_2_tool_strategy_application_mapping_entry": "passed",
+        "batch5_3_batch5_summary_acceptance": "passed"
+      }
+    },
+    {
+      "batch": "batch_6",
+      "status": "passed",
+      "finished_at": "2026-08-29T23:55:00+08:00",
+      "note": "first PASS superseded by operator review (batch6_4); restored after seven revision items landed and were re-verified",
+      "subitems": {
+        "batch6_0_injection_candidate_contract_and_module": "passed",
+        "batch6_1_injection_and_parser_deserialization_screening": "passed",
+        "batch6_2_ssrf_candidate_screening_and_strategy_entry": "passed",
+        "batch6_3_batch6_summary_acceptance": "superseded_by_operator_review",
+        "batch6_4_operator_revision_seven_items": "passed"
+      }
+    },
+    {
+      "batch": "batch_7",
+      "status": "passed",
+      "finished_at": "2026-08-30T14:00:00+08:00",
+      "note": "batch7_0 completed in a prior session (verified on disk); batch7_1 recovered after session crash (deliverables verified, tested, closed); includes graphql/websocket/browser_boundary/file_path_candidate_screening",
+      "subitems": {
+        "batch7_0_graphql_contract_inventory_and_review": "passed",
+        "batch7_1_websocket_inventory_and_review": "passed",
+        "batch7_2_browser_boundary_review": "passed",
+        "batch7_3_file_path_candidate_screening": "passed",
+        "batch7_4_batch7_summary_acceptance": "passed"
+      }
+    },
+    {
+      "batch": "batch_8",
+      "status": "passed",
+      "finished_at": "2026-08-30T01:40:00+08:00",
+      "note": "operator review revision round completed (batch8_5..8_11, batch6_4 precedent): PASS restored after eight operator decisions landed and re-verified; first PASS (batch8_4) superseded; full regression 813 passed bare-shell and PYTHONUTF8=1; 9th contract api_reconciliation_schema.json wired into validate_run_contracts",
+      "subitems": {
+        "batch8_0_api_inventory_reconcile": "passed",
+        "batch8_1_api_resource_controls": "passed",
+        "batch8_2_third_party_api_review": "passed",
+        "batch8_3_graphql_websocket_orchestration_boundary": "passed",
+        "batch8_4_batch8_summary_acceptance": "superseded_by_operator_review",
+        "batch8_5_operator_review_decisions": "passed",
+        "batch8_6_tool_strategy_orchestration_only": "passed",
+        "batch8_7_object_field_authorization_substatus": "passed",
+        "batch8_8_subdomain_import_purification": "passed",
+        "batch8_9_context_loading_map_expansion": "passed",
+        "batch8_10_reconciliation_contract_and_versioned_definitions": "passed",
+        "batch8_11_batch8_summary_reacceptance": "passed"
+      }
+    },
+    {
+      "batch": "batch_9",
+      "status": "passed",
+      "finished_at": "2026-08-30T13:20:00+08:00",
+      "note": "spec 5.5 business_logic_testing sub-branches: offline state machine reconstruction + replay/duplicate screening (single-repeat-click != race) + race hypothesis generation with approval envelope (never auto-executes); no contract files (spec 3.1 lists no business_logic modules, logged in batch9_0 card); new environment blocker B5 (malformed pytest-current symlink ACL damage in user Temp, operator-owned) -- regressions run with --basetemp bypass; full regression 854 passed both bare-shell and PYTHONUTF8=1",
+      "subitems": {
+        "batch9_0_state_machine_reconstruction": "passed",
+        "batch9_1_replay_duplicate_screening": "passed",
+        "batch9_2_race_hypothesis": "passed",
+        "batch9_3_batch9_summary_acceptance": "passed"
+      }
+    },
+    {
+      "batch": "batch_10",
+      "status": "passed",
+      "finished_at": "2026-08-30T15:10:00+08:00",
+      "note": "spec 6.2 authentication_session split (platform_login_exchange/session_token_lifecycle/signature_replay) + 6.5 three modules; batch10_0 landed contracts/miniapp_auth_schema.json (10th contract, spec 3.5 miniapp_auth pre-wiring honored; reconciliation logged); shared auth review engine in platform_login_exchange.py (thin sibling modules, fan-in import); phase substatuses + proven-completion audit (tested/not_applicable + reason + resolvable evidence_ref); resume upgrade of legacy authentication_session rows to three pending rows; 3 tool_strategy entries (manual_ prefix logical names -- registry violation really caught and fixed by rename); AGENT_MANIFEST regenerated; full regression 919 passed both bare-shell and PYTHONUTF8=1 (854 handoff baseline + 64 accounted, +1 discrepancy logged as possible batch9 count slip); B2/B5 remain BLOCKED (environment/ledger items)",
+      "subitems": {
+        "batch10_0_xcx_auth_phase_split": "passed",
+        "batch10_1_platform_login_exchange": "passed",
+        "batch10_2_session_token_lifecycle": "passed",
+        "batch10_3_signature_replay_review": "passed",
+        "batch10_4_strategy_context_manifest_sync": "passed",
+        "batch10_5_batch10_summary_acceptance": "passed"
+      }
+    },
+    {
+      "batch": "batch_11",
+      "status": "passed",
+      "finished_at": "2026-08-30T17:30:00+08:00",
+      "note": "spec 6.2 client_storage_crypto split (local_data_exposure/crypto_and_secret_handling) + package_integrity_update_review insertion after source_reconstruction + spec 6.3 package integrity module + 6.6 two modules; batch11_0 landed contracts/miniapp_storage_package_schema.json (11th contract; spec 6.3/6.6 list no contract file and 3.5 pre-wires none -- contract added per AGENTS.md section 11 every-phase-needs-schema rule with batch10_0 precedent, logged in batch11_0 card); package_integrity_update.py hosts the Batch 11 shared engine (thin sibling modules fan-in; generic engine single-sourced from batch10 auth engine via neutral aliases); audit generalized to _review_phase_issues helper (auth message templates byte-preserved); resume upgrade (legacy client_storage_crypto row split + package row insertion, idempotent); secret_candidate red line landed as red_lines/constant/signal semantics (8-state model untouched); debug switches deduplicated to package_integrity_update_review (contract invariant); 3 tool_strategy entries (manual_ prefix, no registry additions); AGENT_MANIFEST regenerated (44 phases, idempotent sha256-verified); full regression 997 passed both bare-shell and PYTHONUTF8=1 (919 + 78 exactly accounted); B2/B5 remain BLOCKED (environment/ledger items)",
+      "subitems": {
+        "batch11_0_xcx_storage_package_phase_split": "passed",
+        "batch11_1_package_integrity_update": "passed",
+        "batch11_2_local_data_exposure": "passed",
+        "batch11_3_crypto_secret_review": "passed",
+        "batch11_4_strategy_context_manifest_sync": "passed",
+        "batch11_5_batch11_summary_acceptance": "passed"
+      }
+    },
+    {
+      "batch": "batch_12",
+      "status": "passed",
+      "finished_at": "2026-08-30T21:40:00+08:00",
+      "note": "spec 6.4 static_dynamic_reconciliation (CSV reconciliation, ten row-level endpoint states distinct from coverage_substatus six values) + spec 6.7 cloud three modules (cloud_function_review hosting the Batch 12 shared engine, cloud_storage_review thin sibling, third_party_boundary_review CSV-shaped boundary inventory) + spec 6.2 remaining splits (static_dynamic_reconciliation inserted after dynamic_mapping; plugins_cloud_third_party -> cloud_function_testing/cloud_storage_acl_testing/third_party_platform_boundary); batch12_0 landed TWO contracts (12th miniapp_reconciliation_schema + 13th miniapp_cloud_schema, both wired into validate_run_contracts; spec 6.4/6.7 list no contract files and 3.5 pre-wires none -- two contracts chosen because 6.4 CSV shape family differs from 6.7 review-JSON family, per batch10_0/batch11_0 precedent, logged in batch12_0 card); CSV-phase completion semantics adapted from batch10 proven semantics (header exact match incl. empty-CSV drift check, judgment rows require reason, tested requires >=1 row, not_applicable requires phase reason); batch10 test assertion updated once per spec 6.2 necessity (platform_login_exchange == dynamic_mapping+2, logged); 4 tool_strategy entries (48 phases); CONTEXT_LOADING_MAP two new sections; AGENT_MANIFEST regenerated (48 phases, idempotent); full regression 1098 passed both bare-shell and PYTHONUTF8=1 (997 + 99 new tests + 2 CONTRACT_FILES parametrize expansion, exactly accounted); verify_offline re-run: compile/doc-drift ok, skill-drift fail = B2 signature, tests fail = B5 (net-TMP re-run tests ok=true); B2/B5 remain BLOCKED (environment/ledger items)",
+      "subitems": {
+        "batch12_0_cloud_reconciliation_phase_split": "passed",
+        "batch12_1_static_dynamic_reconciliation_module": "passed",
+        "batch12_2_cloud_function_review_module": "passed",
+        "batch12_3_cloud_storage_review_module": "passed",
+        "batch12_4_third_party_boundary_review_module": "passed",
+        "batch12_5_strategy_context_contract_manifest_sync": "passed",
+        "batch12_6_batch12_summary_acceptance": "passed"
+      }
+    },
+    {
+      "batch": "batch_13",
+      "status": "passed",
+      "finished_at": "2026-08-30T23:20:00+08:00",
+      "note": "spec 6.8 webview_bridge_links fixed artifacts (no new phase, no split): seven branches one-per coverage item (1674-1680) seeded into phase_status substatuses + three fixed CSV artifacts (spec 1667-1669 verbatim; 11/9/9 columns; branch-to-artifact 1:1) + _csv_phase_issues refactored into three shared blocks (_recorded_substatus_issues/_csv_artifact_issues/_csv_completion_issues) with byte-identical messages and signatures, enabling multi-artifact phases via webview_bridge_links_issues (block A validates all seven branches once, block C tested>=1-row counted per branch's own artifact); batch13_0 D3 landed contracts/miniapp_webview_schema.json (14th contract; spec 6.8/6.1/3.1/13.1 list no webview contract/test/module files -- contract chosen per artifact-shape-locking-carrier rationale with batch10/11/12 precedent, logged; NO domain module per D4 with batch9_0 contrast logged); resume upgrade _upgrade_phase_status_webview_artifacts (missing substatuses seeded, legacy complete reset to pending with migrated_pre_webview_artifacts reason, idempotent); workflow.md structured webview section + test-matrix row update; tool_strategy entry (49 phases); CONTEXT_LOADING_MAP miniapp_webview section; validator check loads audit-script constants from SCRIPT_ROOT via importlib (implementation side) while contract reads --root (tamper negatives meaningful); AGENT_MANIFEST regenerated (49 phases, idempotent); full regression 1133 passed both bare-shell and PYTHONUTF8=1 (1098 + 27 webview + 7 validator [6 negatives + 1 CONTRACT_FILES parametrize] + 1 context loader, exactly accounted); 4 in-flight failures all caught by real runs and fixed on the spot (init Edit anchor swallowed parse_args def line, contract-lock order-sensitive assertion, validator union check inside loop, validator --root script load); B2/B5 remain BLOCKED (environment/ledger items)",
+      "subitems": {
+        "batch13_0_current_state_review_and_design_card": "passed",
+        "batch13_1_init_audit_artifact_shapes": "passed",
+        "batch13_2_miniapp_webview_contract": "passed",
+        "batch13_3_skill_references_webview_sync": "passed",
+        "batch13_4_strategy_context_validator_manifest_sync": "passed",
+        "batch13_5_batch13_summary_acceptance": "passed"
+      }
+    },
+    {
+      "batch": "batch_14",
+      "status": "passed",
+      "finished_at": "2026-08-31T00:40:00+08:00",
+      "note": "spec section 3.2/8/11 prompt+skill sync: 11.1 conclusion template + four-question veto + 11.3/11.4 into 3 SKILLs (fh/wz/xcx) and 6 recipes (A/B/C/D/F/Z) with mirrors; RULE_PRECEDENCE single-source reference into all 9; spec 8 fh chain: findings_ledger 28 cols (15 legacy + 13 spec-8.2 fields, init/dispatch aligned, AI-drafted confirmed rows quality_status=needs_manual_validation never bypassing confirmed gate), fh SKILL 8.3 run-level 13-step aggregation order, review-playbook 8.4 five verdict rules, output-map field map, postrun-review delegation note, root/skill init_postrun_review unified (skill verdicts/ semantics); B2 resolved (both mirrors evidence-reporting.md CRLF->LF byte-equal to canonical sha256 04a3a08f, check_skill_drift first all-green, mirror test exception collapsed to test_xcx_mirrors_are_byte_identical no-exceptions); health_scope_import import-time purity fix (batch8_8 precedent helper + __main__ guard) + 3 purity tests; batch14_5 first full regression exposed 4 pre-existing latent test-side locale fragilities (GBK pytest parent decoding UTF-8 subprocess output -> stdout=None, batch8_0 stdout=None family) -- root-caused and fixed hermetically (10 subprocess.run sites encoding=utf-8 + PYTHONUTF8 pin), no implementation defects; full regression 1147 passed both bare-shell and PYTHONUTF8=1 (1133 + 11 fh_skill_sync + 3 purity, exactly accounted); verify_offline all-green for the first time since batch 0 (status=ok: B2 skill-drift signature gone, tests item passes in bare process); B5 not reproduced this session (remains operator-owned); MANIFEST regenerated idempotent sha256 704edc1a (50 root scripts + 49 phases); no new contract files (28-col findings layout test-locked, text-sync-class deliverable logged); no network/rate/concurrency/approval-gate changes",
+      "subitems": {
+        "batch14_0_current_state_review_and_design_card": "passed",
+        "batch14_1_b2_mirror_line_ending_fix_and_test_exception_collapse": "passed",
+        "batch14_2_health_scope_import_purity_fix": "passed",
+        "batch14_3_prompt_skill_rule_sync": "passed",
+        "batch14_4_fh_chain_spec8_sync": "passed",
+        "batch14_5_batch14_summary_acceptance_and_b2_resolution": "passed"
+      }
+    },
+    {
+      "batch": "batch_15",
+      "status": "passed",
+      "subitems": {
+        "batch15_0_current_state_review_and_schema_design": "passed",
+        "batch15_1_review_feedback_contract_and_ingest": "passed",
+        "batch15_2_precision_model_and_candidate_consumption": "passed",
+        "batch15_3_review_memory_rebuild": "passed",
+        "batch15_4_run_identity_hash_producer": "passed",
+        "batch15_5_run_dedup_gate": "passed",
+        "batch15_6_recipe_b_e_metrics_closure": "passed"
+      },
+      "finished_at": "2026-08-31T05:40:00+08:00",
+      "note": "six subitems passed; full regression 1168 passed in bare-shell and PYTHONUTF8=1 states; lineage-aware metrics and offline feedback closure landed"
+    },
+    {
+      "batch": "batch_16",
+      "status": "passed",
+      "finished_at": "2026-08-31T08:55:00+08:00",
+      "subitems": {
+        "batch16_0_current_state_review_and_design_card": "passed",
+        "batch16_1_ffuf_directory_candidate_capability": "passed",
+        "batch16_2_single_candidate_xss_validation": "passed",
+        "batch16_3_passive_subdomain_candidates": "passed",
+        "batch16_4_static_analysis_signals": "passed",
+        "batch16_5_offline_sbom_inventory": "passed",
+        "batch16_6_registry_strategy_manifest_context_sync": "passed",
+        "batch16_7_batch16_summary_acceptance": "passed"
+      },
+      "note": "spec 7/13.1/13.2 tool capability batch: seven tools registered explicit unavailable (no download allowed; dalfox/codeql as explicit 二选一 losers, no fuzzy or), five offline plan+ingest capability modules (ffuf controlled directory candidates with wordlist+baseline+semantic negatives / XSStrike single-candidate XSS validation (reflection-not-executable never upgrades) / subfinder+dnsx passive+known-candidate with scope gating (confirmation_required fail-closed) / Semgrep static analysis signals (local rules only, --metrics=off, static hit never auto-confirms) / offline SBOM inventory (local advisory cache or manual-review-only, vulnerable/confirmed rejected by validator)); registry 25->32 tools rebuild --check exit 0; strategy compound or-names cleaned to honest executable refs (dirsearch/nuclei); AGENT_MANIFEST regenerated idempotent 50045 chars; CONTEXT_LOADING_MAP phases 10->15 with REQUIRED_PHASES contract extended; full regression 1259 passed both bare-shell and PYTHONUTF8=1 (1168 + 91 exactly accounted: 85 capability + 6 registry sync); verify_offline failed only on B5 signature in bare process, net-TMP re-run status=ok all four checks; validators 0 violations; skill/doc drift clean; git diff --check ok (CRLF warnings pre-existing); no network/rate/concurrency/approval-gate changes; three stale pre-registration assertions updated to post-registry honest state (executable=false invariant unchanged)"
+    },
+    {
+      "batch": "batch_17",
+      "status": "passed",
+      "finished_at": "2026-08-31T09:40:00+08:00",
+      "subitems": {
+        "batch17_0_current_state_review_and_acceptance_plan": "passed",
+        "batch17_1_final_acceptance_command_suite": "passed",
+        "batch17_2_completion_definition_and_negative_coverage_audit": "passed",
+        "batch17_3_final_report": "passed",
+        "batch17_4_b5_cleared_bare_command_reacceptance": "passed"
+      },
+      "note": "final acceptance batch (read-only): bare `pytest -q` original form reproduced B5 signature exactly (all tests executed, sessionfinish cleanup PermissionError WinError 5 on Temp malformed pytest-current symlink, pytest exit 1) -> overall status honestly PARTIAL per rule that bare-command final acceptance must pass before overall PASS; --basetemp both states 1259 passed (1168+91 exactly accounted from batch 16); verify_offline net-TMP status=ok all four checks; validate_run_contracts / validate_finding_quality exit 0; doc-drift clean; skill-drift ok (30 files); git diff --check exit 0; completion definition 19/19 items evidenced; spec 13.2 negatives 17/17 mapped to tests; B5 remains operator-owned (elevated deletion of Temp\\pytest-of-ASUS\\pytest-current), after which bare command passes and overall turns PASS with no code change; batch17_4 re-acceptance after operator cleared B5: bare `pytest -q` original form 1259 passed exit 0, verify_offline normal-process status=ok all four checks, all validators exit 0, no symlink regressed -> B5 RESOLVED in blockers ledger and OVERALL STATUS turned PASS (no code change needed or made)"
+    }
+  ],
+  "last_passed_at": "2026-08-31T10:20:00+08:00",
+  "last_failed_at": null,
+  "last_verified_commit_or_tree_hash": "75b607a9a4b7cc5662f820e041992d0fd02c8b84",
+  "overall_status": "PASS"
+}

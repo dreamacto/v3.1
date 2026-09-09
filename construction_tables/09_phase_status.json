@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "construction_table": "09",
+  "phase": "full_file_regression_and_release_acceptance",
+  "status": "complete",
+  "cursor": "complete",
+  "handoff_ready": true,
+  "acceptance_record": "construction_tables/09_acceptance_record.json",
+  "code_worker": "construction_tables/09_code_worker.json",
+  "analyst_worker": "construction_tables/09_analyst_worker.json",
+  "verifier": "construction_tables/09_verifier.json",
+  "coverage": "All actual HEAD scoped records, contracts, orchestration/runtime/policy/quality/reporting sources, root entries and related tests were dynamically enumerated and registered.",
+  "not_tested": [
+    "No real targets, network adapters, credentials, sessions, HAR/raw responses, runs or engagements read.",
+    "No multi-process lease/idempotency/checkpoint race, filesystem crash injection, distributed lease, OS sandbox, real Supervisor end-to-end, or real legacy entrypoint execution.",
+    "Fan-in barrier persistence and duplicate downstream trigger after recovery are not fully exercised.",
+    "Existing dirty worktree may diverge from HEAD; verdict applies to current HEAD only."
+  ],
+  "failed": [],
+  "blocked": [],
+  "approval_required": [
+    "No approval-gated action executed; future active/real-target dispatch remains approval-gated."
+  ],
+  "operator_tasks": [
+    "Human disposition of historical .zcode/table01_graph_static_handoff.json conflict before archival cleanup."
+  ],
+  "network_requests": 0,
+  "real_targets": 0
+}

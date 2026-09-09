@@ -1,6 +1,8 @@
 # Operator-provided authentication material must never enter source control.
 auth_sessions.local.json
 **/auth_sessions.local.json
+sessions.jsonl
+**/sessions.jsonl
 *.cookies.local.json
 *.headers.local.json
 *.local.json
@@ -138,3 +140,14 @@ knowledge_base/hypothesis_ledger.jsonl
 
 # Playwright MCP runtime logs/page snapshots (local, sensitive page content possible)
 .playwright-mcp/
+
+# managed binary tools (nuclei/github-mcp-server) stay out of git
+tools/managed/github-mcp-server/
+
+# session/credential material stays local (AGENTS.md 凭证纪律) + local runtime scratch
+sessions.jsonl
+logs/
+tmp_ins_analysis/
+
+# orchestration runtime state snapshots (same class as runs/)
+runtime/

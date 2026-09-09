@@ -531,6 +531,51 @@ def test_run_contracts_detects_miniapp_auth_row_fields_drift(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# P2 ⑧（X-2）：signature_replay L0 执行器段纳入 miniapp_auth 契约校验（2026-09-07）
+# ---------------------------------------------------------------------------
+
+def test_run_contracts_detects_missing_l0_executor(tmp_path):
+    """删除 l0_executor 段必须被检出。"""
+    root = _copy_contracts(tmp_path)
+    path = root / "contracts" / "miniapp_auth_schema.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    del data["l0_executor"]
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    violations = collect_violations(root)
+    assert any("miniapp_auth_schema.l0_executor missing" in v for v in violations)
+
+
+def test_run_contracts_detects_l0_write_ack_constraint_drift(tmp_path):
+    """write_risk_ack_must_be 被(伪)审批解锁为 true 必须被检出（硬红线）。"""
+    root = _copy_contracts(tmp_path)
+    path = root / "contracts" / "miniapp_auth_schema.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["l0_executor"]["constraints"]["write_risk_ack_must_be"] = True
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    violations = collect_violations(root)
+    assert any(
+        "l0_executor.constraints.write_risk_ack_must_be drift" in v for v in violations
+    )
+
+
+def test_run_contracts_detects_l0_budget_and_artifact_drift(tmp_path):
+    """端点预算/方法/产物路径篡改必须被检出。"""
+    root = _copy_contracts(tmp_path)
+    path = root / "contracts" / "miniapp_auth_schema.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["l0_executor"]["constraints"]["max_endpoints_per_host"] = 10
+    data["l0_executor"]["constraints"]["allowed_methods"] = ["GET", "POST"]
+    data["l0_executor"]["artifact"] = "artifacts/miniapp/auth/other.jsonl"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    violations = collect_violations(root)
+    assert any(
+        "l0_executor.constraints.max_endpoints_per_host drift" in v for v in violations
+    )
+    assert any("l0_executor.constraints.allowed_methods drift" in v for v in violations)
+    assert any("l0_executor.artifact drift" in v for v in violations)
+
+
+# ---------------------------------------------------------------------------
 # Batch 11（batch11_4）：miniapp_storage_package 契约纳入 run 契约校验（第 11 契约）
 # ---------------------------------------------------------------------------
 

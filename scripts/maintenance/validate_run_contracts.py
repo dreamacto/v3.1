@@ -4,14 +4,23 @@
 校验三层一致性（离线、零网络）：
   1. contracts/*.json 可解析且结构完整（workflow / run_quality / rule_precedence /
      context_snapshot / candidate_identity / tool_capability / injection_candidate /
-     graphql / api_reconciliation / miniapp_auth / miniapp_storage_package）；
+     graphql / api_reconciliation / miniapp_auth / miniapp_storage_package /
+     miniapp_reconciliation / miniapp_cloud / miniapp_webview /
+     app_auth / app_storage_package / app_reconciliation / app_webview /
+     app_ipc / app_cloud / app_graph）；
   2. 状态模型无漂移：契约 ↔ 实现常量（run_lifecycle 报告生命周期与质量结论许可集、
      quality gate 五态与门控原因、fh_review_dispatch verdict 枚举 ⊆ review_statuses、
      finding 8 状态三方交叉、candidate_identity 键集/枚举/限量 ↔ canonical_keys、
      tool_capability 字段集/状态枚举 ↔ tools/registry 模块 ↔ tools/tool_registry.json、
      injection_candidate 类别/证据形态/升级规则 ↔ injection_candidates 模块、
      miniapp_auth 三 phase 分支/产物路径/形状 ↔ miniapp 三模块引擎、
-     miniapp_storage_package 三 phase 分支/产物路径/形状 ↔ miniapp 三模块引擎）；
+     miniapp_storage_package 三 phase 分支/产物路径/形状 ↔ miniapp 三模块引擎、
+     app 六契约分支/产物路径/CSV 表头/行级枚举 ↔ .agents/skills/app 的
+     init/audit 种子常量 + src/authorized_assessment/app/ 全部引擎常量（B5：hardening/
+     static_extraction/webview/ipc 与共享骨架；B6：auth 三模块 + local/crypto +
+     reconciliation + cloud 三模块——契约↔引擎↔种子三处同源收口，含红线锚点与
+     零网络 import 扫描；B9：app_graph_schema 结构 + orchestration/app_graph 工厂
+     ↔ init 种子同源，双审批门不可自动推进）；
   3. 门控阈值无漂移：run_quality_schema.gate_thresholds ↔ GateThresholds 默认值。
 
 退出码：0 全部通过；1 存在违例。--json 输出机器可读报告；--root 可指向其他根（用于负例）。
@@ -103,6 +112,26 @@ EXPECTED_MERGE_KEY_FIELDS = (
 )
 EXPECTED_CROSS_RUN_FIELDS = ("first_seen", "last_seen", "seen_count", "latest_status",
                              "latest_evidence_ref")
+
+# APP 流 B4（W19 上半）：六个必需契约 + review JSON 12 键形状（与 miniapp 契约同构）。
+REQUIRED_APP_CONTRACTS = (
+    "app_auth_schema.json",
+    "app_storage_package_schema.json",
+    "app_reconciliation_schema.json",
+    "app_webview_schema.json",
+    "app_ipc_schema.json",
+    "app_cloud_schema.json",
+)
+# APP 流 B9（W21）：编排 graph 契约（JSON-Schema 元契约形态，同 xcx_graph_schema）。
+REQUIRED_APP_GRAPH_CONTRACTS = (
+    "app_graph_schema.json",
+)
+APP_REVIEW_ARTIFACT_KEYS = (
+    "schema_version", "contract", "phase", "observation_schema_version",
+    "row_fields", "summary_fields", "substatuses", "rows", "summaries",
+    "violations", "authorization_basis", "updated_at",
+)
+_APP_SKILL_MODULES: dict[str, object] = {}
 
 
 def _injection_rule_shape(rule: object) -> tuple[tuple[str, ...], tuple[tuple[str, ...], ...], tuple[tuple[str, ...], ...]]:
@@ -781,6 +810,7 @@ def check_miniapp_auth_schema(root: Path) -> list[str]:
         from authorized_assessment.miniapp import platform_login_exchange as eng
         from authorized_assessment.miniapp import session_token_lifecycle as stl
         from authorized_assessment.miniapp import signature_replay_review as srr
+        from authorized_assessment.miniapp import signature_replay_l0 as srl
         from authorized_assessment.triage import injection_candidates as ic
     except Exception as exc:  # noqa: BLE001 - 校验器必须报告而非崩溃
         return violations + [f"miniapp auth modules import failed: {exc}"]
@@ -845,6 +875,47 @@ def check_miniapp_auth_schema(root: Path) -> list[str]:
         violations.append("miniapp_auth_schema.red_lines missing or empty")
     if not isinstance(data.get("invariants"), list) or not data["invariants"]:
         violations.append("miniapp_auth_schema.invariants missing or empty")
+    # P2 ⑧（X-2）：L0 受控重放执行器段 ↔ signature_replay_l0 模块常量同源校验。
+    l0 = data.get("l0_executor")
+    if not isinstance(l0, dict):
+        violations.append("miniapp_auth_schema.l0_executor missing")
+    else:
+        if l0.get("module") != "src/authorized_assessment/miniapp/signature_replay_l0.py":
+            violations.append("miniapp_auth_schema.l0_executor.module drift against module path")
+        if l0.get("artifact") != srl.SIGNATURE_REPLAY_L0_ARTIFACT:
+            violations.append("miniapp_auth_schema.l0_executor.artifact drift against module")
+        if l0.get("mode") != "plan_and_ingest":
+            violations.append("miniapp_auth_schema.l0_executor.mode must be plan_and_ingest")
+        constraints = l0.get("constraints")
+        if not isinstance(constraints, dict):
+            violations.append("miniapp_auth_schema.l0_executor.constraints missing")
+        else:
+            expected_constraints = {
+                "allowed_methods": list(srl.L0_ALLOWED_METHODS),
+                "endpoint_classes": list(srl.L0_ENDPOINT_CLASSES),
+                "allowed_endpoint_class": srl.L0_ALLOWED_ENDPOINT_CLASS,
+                "max_endpoints_per_host": srl.L0_MAX_ENDPOINTS_PER_HOST,
+                "min_delay_seconds": srl.L0_MIN_DELAY_SECONDS,
+                "time_window_offsets_seconds": list(srl.L0_TIME_WINDOW_OFFSETS_SECONDS),
+                "replays_per_window": srl.L0_REPLAYS_PER_WINDOW,
+                "write_risk_ack_must_be": srl.L0_WRITE_RISK_ACK_MUST_BE,
+            }
+            for key, expected in expected_constraints.items():
+                if constraints.get(key) != expected or type(constraints.get(key)) is not type(expected):
+                    violations.append(
+                        f"miniapp_auth_schema.l0_executor.constraints.{key} drift: "
+                        f"{constraints.get(key)!r} != {expected!r}"
+                    )
+        if tuple(l0.get("replay_outcomes") or ()) != tuple(srl.L0_REPLAY_OUTCOMES):
+            violations.append(
+                "miniapp_auth_schema.l0_executor.replay_outcomes drift against module"
+            )
+        if tuple(l0.get("row_statuses") or ()) != tuple(srl.L0_ROW_STATUSES):
+            violations.append("miniapp_auth_schema.l0_executor.row_statuses drift against module")
+        if l0.get("row_branch") != srl.L0_ROW_BRANCH:
+            violations.append("miniapp_auth_schema.l0_executor.row_branch drift against module")
+        if not isinstance(l0.get("red_lines"), list) or not l0["red_lines"]:
+            violations.append("miniapp_auth_schema.l0_executor.red_lines missing or empty")
     return violations
 
 
@@ -1339,6 +1410,1065 @@ def check_miniapp_webview_schema(root: Path) -> list[str]:
     return violations
 
 
+def _app_skill_module(script_name: str) -> tuple[object | None, str | None]:
+    """按路径离线加载 .agents/skills/app/scripts/ 下的种子常量脚本（与
+    check_miniapp_webview_schema 加载 xcx audit 脚本同法）：实现常量来自真实仓库
+    （SCRIPT_ROOT），契约数据来自 --root——篡改负例才有意义。结果进程内缓存。"""
+    module = _APP_SKILL_MODULES.get(script_name)
+    if module is not None:
+        return module, None
+    import importlib.util
+
+    path = SCRIPT_ROOT / ".agents" / "skills" / "app" / "scripts" / script_name
+    if not path.is_file():
+        return None, f"app skill script missing: {script_name}"
+    try:
+        spec = importlib.util.spec_from_file_location(
+            f"validate_app_{script_name[:-3]}", path
+        )
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+    except Exception as exc:  # noqa: BLE001 - 校验器必须报告而非崩溃
+        return None, f"app skill script load failed ({script_name}): {exc}"
+    _APP_SKILL_MODULES[script_name] = module
+    return module, None
+
+
+def _check_app_common_shape(name: str, data: dict, root: Path) -> list[str]:
+    """六个 app 契约的公共结构：schema_version/contract 名/type/phases/red_lines/
+    invariants + coverage_substatus 六值枚举 ↔ coverage_substatus_schema 交叉。"""
+    violations: list[str] = []
+    if data.get("schema_version") != "1.0":
+        violations.append(f"{name}.schema_version drift")
+    expected_contract = name[: -len(".json")]
+    if data.get("contract") != expected_contract:
+        violations.append(f"{name}.contract must be {expected_contract}")
+    if data.get("type") != "object":
+        violations.append(f"{name}.type must be object")
+    for field in ("phases", "red_lines", "invariants"):
+        value = data.get(field)
+        if not isinstance(value, (dict, list)) or not value:
+            violations.append(f"{name}.{field} missing or empty")
+    coverage = data.get("coverage_substatus")
+    if not isinstance(coverage, dict):
+        violations.append(f"{name}.coverage_substatus missing")
+    else:
+        sub, err = _load_json(root / "contracts" / "coverage_substatus_schema.json")
+        if err:
+            violations.append(err)
+        elif tuple(coverage.get("status_values") or ()) != tuple(sub.get("status_values") or ()):
+            violations.append(
+                f"{name}.coverage_substatus.status_values drift "
+                "against coverage_substatus_schema"
+            )
+        if tuple(coverage.get("proven_values") or ()) != ("tested", "not_applicable"):
+            violations.append(f"{name}.coverage_substatus.proven_values drift")
+    return violations
+
+
+def _check_app_phase_specs(name: str, data: dict, init_mod: object) -> list[str]:
+    """review/单产物 phase 的逐 phase 校验：branches ↔ init.PHASE_BRANCHES、
+    artifact（字符串）↔ init.PHASE_ARTIFACTS、description 非空。"""
+    violations: list[str] = []
+    phases = data.get("phases")
+    if not isinstance(phases, dict):
+        return violations
+    for phase, spec in phases.items():
+        if not isinstance(spec, dict):
+            violations.append(f"{name}.phases.{phase} must be an object")
+            continue
+        if tuple(spec.get("branches") or ()) != tuple(
+            init_mod.PHASE_BRANCHES.get(phase, ())  # type: ignore[attr-defined]
+        ):
+            violations.append(f"{name}.phases.{phase}.branches drift against init seed")
+        if spec.get("artifact") != init_mod.PHASE_ARTIFACTS.get(phase, ("",))[0]:  # type: ignore[attr-defined]
+            violations.append(f"{name}.phases.{phase}.artifact drift against init seed")
+        if not str(spec.get("description") or "").strip():
+            violations.append(f"{name}.phases.{phase}.description missing or empty")
+    return violations
+
+
+def _check_app_review_json_fields(name: str, data: dict, init_mod: object, audit_mod: object) -> list[str]:
+    """review JSON 契约的形状校验：artifact_fields 三表头 ↔ init.REVIEW_SKELETON_FIELDS
+    + 12 键 artifact_keys；observation_schema_version；authorization_basis ↔ audit。"""
+    violations: list[str] = []
+    fields = data.get("artifact_fields")
+    if not isinstance(fields, dict):
+        violations.append(f"{name}.artifact_fields missing")
+    else:
+        if tuple(fields.get("row_fields") or ()) != tuple(
+            init_mod.REVIEW_SKELETON_FIELDS["row_fields"]  # type: ignore[attr-defined]
+        ):
+            violations.append(f"{name}.artifact_fields.row_fields drift against init seed")
+        if tuple(fields.get("summary_fields") or ()) != tuple(
+            init_mod.REVIEW_SKELETON_FIELDS["summary_fields"]  # type: ignore[attr-defined]
+        ):
+            violations.append(f"{name}.artifact_fields.summary_fields drift against init seed")
+        if tuple(fields.get("artifact_keys") or ()) != APP_REVIEW_ARTIFACT_KEYS:
+            violations.append(f"{name}.artifact_fields.artifact_keys drift (12-key review JSON 形状)")
+    if data.get("observation_schema_version") != "1.0":
+        violations.append(f"{name}.observation_schema_version drift")
+    if set(data.get("authorization_basis_values") or ()) != set(
+        audit_mod.AUTHORIZATION_BASIS_VALUES  # type: ignore[attr-defined]
+    ):
+        violations.append(f"{name}.authorization_basis_values drift against audit seed")
+    return violations
+
+
+def _check_app_csv_artifact_entries(
+    name: str,
+    phase: str,
+    entries: object,
+    init_mod: object,
+    audit_mod: object,
+    branch_artifacts: dict[str, str],
+    enum_sources: dict[str, dict[str, tuple[str, ...]]],
+) -> list[str]:
+    """webview/ipc 式多 CSV 产物校验：产物路径 ↔ init.PHASE_ARTIFACTS（顺序敏感）、
+    分支分组 ↔ audit branch→artifact 映射（1:1 无交集并集恰等）、csv_fields ↔
+    init.REVIEW_CSV_ARTIFACTS、row_enums ↔ audit 行级枚举、required_non_empty
+    ⊆ csv_fields。"""
+    violations: list[str] = []
+    expected_paths = tuple(
+        init_mod.PHASE_ARTIFACTS.get(phase, ())  # type: ignore[attr-defined]
+    )
+    if not isinstance(entries, list):
+        violations.append(f"{name}.phases.{phase}.artifacts must be a list")
+        return violations
+    actual_paths = tuple(
+        entry.get("artifact") for entry in entries if isinstance(entry, dict)
+    )
+    if actual_paths != expected_paths:
+        violations.append(
+            f"{name}.phases.{phase}.artifacts paths drift against init seed"
+        )
+        return violations
+    seen_branches: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        rel = entry.get("artifact")
+        entry_branches = list(entry.get("branches") or [])
+        seen_branches.extend(entry_branches)
+        mapped = sorted(
+            branch for branch, artifact in branch_artifacts.items() if artifact == rel
+        )
+        if sorted(entry_branches) != mapped:
+            violations.append(
+                f"{name}.phases.{phase}.artifacts[{rel}].branches drift against "
+                "audit branch-to-artifact map"
+            )
+        csv_fields = tuple(entry.get("csv_fields") or ())
+        if csv_fields != tuple(
+            init_mod.REVIEW_CSV_ARTIFACTS.get(rel, ())  # type: ignore[attr-defined]
+        ):
+            violations.append(
+                f"{name}.phases.{phase}.artifacts[{rel}].csv_fields drift against init seed"
+            )
+        row_enums = entry.get("row_enums")
+        expected_enums = enum_sources.get(rel, {})
+        if not isinstance(row_enums, dict) or set(row_enums) != set(expected_enums):
+            violations.append(
+                f"{name}.phases.{phase}.artifacts[{rel}].row_enums drift against audit seed"
+            )
+        else:
+            for column, expected_values in expected_enums.items():
+                if tuple(row_enums.get(column) or ()) != tuple(expected_values):
+                    violations.append(
+                        f"{name}.phases.{phase}.artifacts[{rel}].row_enums.{column} "
+                        "drift against audit seed"
+                    )
+        requirements = entry.get("row_requirements")
+        if not isinstance(requirements, dict) or not set(
+            requirements.get("required_non_empty") or []
+        ) <= set(csv_fields):
+            violations.append(
+                f"{name}.phases.{phase}.artifacts[{rel}].row_requirements."
+                "required_non_empty must be a subset of csv_fields"
+            )
+    if len(seen_branches) != len(set(seen_branches)):
+        violations.append(f"{name}.phases.{phase}.artifacts branches overlap")
+    if set(seen_branches) != set(branch_artifacts):
+        violations.append(f"{name}.phases.{phase}.artifacts branch union drift")
+    return violations
+
+
+def check_app_contracts(root: Path) -> list[str]:
+    """APP 流 B4（W19 上半）：六个 app_* 契约 ↔ app init/audit 种子常量同源校验。
+
+    分支与产物路径的唯一事实源为施工方案附录 B 种子；init（PHASE_BRANCHES/
+    PHASE_ARTIFACTS/REVIEW_CSV_ARTIFACTS/REVIEW_SKELETON_FIELDS/
+    RECONCILIATION_ENDPOINT_STATES）与 audit（行级枚举/判定子集/authorization_basis）
+    自包含复制。引擎侧 src/authorized_assessment/app/ 常量同步留待 B5/B6 接入后
+    由 tests/test_app_contract_sync.py 锁定。
+    """
+    violations: list[str] = []
+    init_mod, err = _app_skill_module("init_app_engagement.py")
+    if err:
+        return [err]
+    audit_mod, err = _app_skill_module("audit_app_engagement.py")
+    if err:
+        return violations + [err]
+    assert init_mod is not None and audit_mod is not None
+
+    loaded: dict[str, dict] = {}
+    for cname in REQUIRED_APP_CONTRACTS:
+        data, err = _load_json(root / "contracts" / cname)
+        if err:
+            violations.append(err)
+            continue
+        if not isinstance(data, dict):
+            violations.append(f"{cname} must be an object")
+            continue
+        loaded[cname] = data
+        violations += _check_app_common_shape(cname, data, root)
+
+    # --- app_auth_schema：三 phase（5/5/4 分支），review JSON 形状，永不自动重放红线 ---
+    auth = loaded.get("app_auth_schema.json")
+    if auth is not None:
+        phases = auth.get("phases")
+        if not isinstance(phases, dict) or tuple(phases.keys()) != tuple(
+            init_mod.AUTH_REVIEW_BRANCHES  # type: ignore[attr-defined]
+        ):
+            violations.append(
+                "app_auth_schema.phases must match init AUTH_REVIEW_BRANCHES exactly"
+            )
+        violations += _check_app_phase_specs("app_auth_schema", auth, init_mod)
+        violations += _check_app_review_json_fields(
+            "app_auth_schema", auth, init_mod, audit_mod
+        )
+        red_lines = auth.get("red_lines") or []
+        if not any("永不自动重放" in str(line) for line in red_lines):
+            violations.append("app_auth_schema.red_lines must contain 永不自动重放 red line")
+
+    # --- app_storage_package_schema：三 phase（7/5/4 分支），secret_candidate 与
+    #     APP_NO_REPACKING_RULE 红线在场 ---
+    storage = loaded.get("app_storage_package_schema.json")
+    if storage is not None:
+        expected = tuple(
+            init_mod.HARDENING_REVIEW_BRANCHES  # type: ignore[attr-defined]
+        ) + tuple(
+            init_mod.STORAGE_PACKAGE_REVIEW_BRANCHES  # type: ignore[attr-defined]
+        )
+        phases = storage.get("phases")
+        if not isinstance(phases, dict) or tuple(phases.keys()) != expected:
+            violations.append(
+                "app_storage_package_schema.phases must match init "
+                "HARDENING+STORAGE_PACKAGE branch seeds exactly"
+            )
+        violations += _check_app_phase_specs("app_storage_package_schema", storage, init_mod)
+        violations += _check_app_review_json_fields(
+            "app_storage_package_schema", storage, init_mod, audit_mod
+        )
+        red_lines = storage.get("red_lines") or []
+        joined = " ".join(str(line) for line in red_lines)
+        if "secret_candidate" not in joined:
+            violations.append(
+                "app_storage_package_schema.red_lines must contain secret_candidate rule"
+            )
+        if "APP_NO_REPACKING_RULE" not in joined:
+            violations.append(
+                "app_storage_package_schema.red_lines must contain APP_NO_REPACKING_RULE"
+            )
+
+    # --- app_reconciliation_schema：五分支 + 十态行级枚举 + 判定子集 ---
+    recon = loaded.get("app_reconciliation_schema.json")
+    if recon is not None:
+        phases = recon.get("phases")
+        if not isinstance(phases, dict) or tuple(phases.keys()) != (
+            "static_dynamic_reconciliation",
+        ):
+            violations.append(
+                "app_reconciliation_schema.phases must be exactly static_dynamic_reconciliation"
+            )
+        else:
+            spec = phases["static_dynamic_reconciliation"]
+            if not isinstance(spec, dict):
+                violations.append(
+                    "app_reconciliation_schema.phases.static_dynamic_reconciliation "
+                    "must be an object"
+                )
+            else:
+                artifact = spec.get("artifact")
+                if tuple(spec.get("branches") or ()) != tuple(
+                    init_mod.PHASE_BRANCHES.get("static_dynamic_reconciliation", ())  # type: ignore[attr-defined]
+                ):
+                    violations.append(
+                        "app_reconciliation_schema.phases.static_dynamic_reconciliation"
+                        ".branches drift against init seed"
+                    )
+                if artifact != init_mod.PHASE_ARTIFACTS.get(  # type: ignore[attr-defined]
+                    "static_dynamic_reconciliation", ("",)
+                )[0]:
+                    violations.append(
+                        "app_reconciliation_schema.phases.static_dynamic_reconciliation"
+                        ".artifact drift against init seed"
+                    )
+                if spec.get("artifact_format") != "csv":
+                    violations.append(
+                        "app_reconciliation_schema.phases.static_dynamic_reconciliation"
+                        ".artifact_format drift"
+                    )
+                if tuple(spec.get("csv_fields") or ()) != tuple(
+                    init_mod.REVIEW_CSV_ARTIFACTS.get(artifact or "", ())  # type: ignore[attr-defined]
+                ):
+                    violations.append(
+                        "app_reconciliation_schema csv_fields drift against init seed"
+                    )
+                endpoint_states = tuple(spec.get("endpoint_states") or ())
+                if endpoint_states != tuple(
+                    init_mod.RECONCILIATION_ENDPOINT_STATES  # type: ignore[attr-defined]
+                ):
+                    violations.append(
+                        "app_reconciliation_schema.endpoint_states drift against init seed"
+                    )
+                if tuple(spec.get("judgment_states") or ()) != tuple(
+                    audit_mod.RECONCILIATION_JUDGMENT_STATES  # type: ignore[attr-defined]
+                ):
+                    violations.append(
+                        "app_reconciliation_schema.judgment_states drift against audit seed"
+                    )
+                sub, sub_err = _load_json(
+                    root / "contracts" / "coverage_substatus_schema.json"
+                )
+                if sub_err:
+                    violations.append(sub_err)
+                elif set(endpoint_states) & set(
+                    (sub or {}).get("status_values") or []
+                ) != {"needs_manual_validation"}:
+                    violations.append(
+                        "app_reconciliation_schema.endpoint_states overlap with "
+                        "coverage_substatus_schema must be exactly needs_manual_validation"
+                    )
+            completion = recon.get("csv_phase_completion_invariant")
+            if not isinstance(completion, dict) or not str(
+                completion.get("description") or ""
+            ).strip():
+                violations.append(
+                    "app_reconciliation_schema.csv_phase_completion_invariant missing"
+                )
+
+    # --- app_webview_schema：七分支 × 三 CSV（路径 artifacts/app/webview/） ---
+    webview = loaded.get("app_webview_schema.json")
+    if webview is not None:
+        phases = webview.get("phases")
+        if not isinstance(phases, dict) or tuple(phases.keys()) != ("webview_bridge_links",):
+            violations.append(
+                "app_webview_schema.phases must be exactly webview_bridge_links"
+            )
+        else:
+            spec = phases["webview_bridge_links"]
+            if not isinstance(spec, dict):
+                violations.append("app_webview_schema.phases.webview_bridge_links must be an object")
+            else:
+                if tuple(spec.get("branches") or ()) != tuple(
+                    init_mod.PHASE_BRANCHES.get("webview_bridge_links", ())  # type: ignore[attr-defined]
+                ):
+                    violations.append(
+                        "app_webview_schema.phases.webview_bridge_links.branches "
+                        "drift against init seed"
+                    )
+                if spec.get("artifact_format") != "csv":
+                    violations.append(
+                        "app_webview_schema.phases.webview_bridge_links.artifact_format drift"
+                    )
+                if not str(spec.get("boundary_status_rule") or "").strip():
+                    violations.append(
+                        "app_webview_schema.phases.webview_bridge_links.boundary_status_rule "
+                        "missing or empty"
+                    )
+                violations += _check_app_csv_artifact_entries(
+                    "app_webview_schema",
+                    "webview_bridge_links",
+                    spec.get("artifacts"),
+                    init_mod,
+                    audit_mod,
+                    audit_mod.WEBVIEW_BRANCH_ARTIFACTS,  # type: ignore[attr-defined]
+                    {
+                        "artifacts/app/webview/webview-origin-inventory.csv": {
+                            "cookie_token_shared": audit_mod.WEBVIEW_COOKIE_TOKEN_SHARED_VALUES,  # type: ignore[attr-defined]
+                        },
+                        "artifacts/app/webview/bridge-method-inventory.csv": {
+                            "capability": audit_mod.WEBVIEW_CAPABILITY_VALUES,  # type: ignore[attr-defined]
+                        },
+                        "artifacts/app/webview/deep-link-review-queue.csv": {
+                            "scheme_type": audit_mod.WEBVIEW_SCHEME_TYPES,  # type: ignore[attr-defined]
+                            "jump_target": audit_mod.WEBVIEW_JUMP_TARGETS,  # type: ignore[attr-defined]
+                        },
+                    },
+                )
+                entries = spec.get("artifacts")
+                if isinstance(entries, list):
+                    for entry in entries:
+                        if not isinstance(entry, dict):
+                            continue
+                        requirements = entry.get("row_requirements") or {}
+                        if entry.get("artifact") == "artifacts/app/webview/bridge-method-inventory.csv":
+                            if tuple(requirements.get("reason_required_capabilities") or ()) != tuple(
+                                audit_mod.WEBVIEW_BRIDGE_REASON_CAPABILITIES  # type: ignore[attr-defined]
+                            ):
+                                violations.append(
+                                    "app_webview_schema.reason_required_capabilities "
+                                    "drift against audit seed"
+                                )
+                        if entry.get("artifact") == "artifacts/app/webview/deep-link-review-queue.csv":
+                            if tuple(requirements.get("reason_required_jump_targets") or ()) != tuple(
+                                audit_mod.WEBVIEW_REASON_JUMP_TARGETS  # type: ignore[attr-defined]
+                            ):
+                                violations.append(
+                                    "app_webview_schema.reason_required_jump_targets "
+                                    "drift against audit seed"
+                                )
+
+    # --- app_ipc_schema：七分支 × 两 CSV（artifacts/app/ipc/，App 特有） ---
+    ipc = loaded.get("app_ipc_schema.json")
+    if ipc is not None:
+        phases = ipc.get("phases")
+        if not isinstance(phases, dict) or tuple(phases.keys()) != ("ipc_component_boundary",):
+            violations.append(
+                "app_ipc_schema.phases must be exactly ipc_component_boundary"
+            )
+        else:
+            spec = phases["ipc_component_boundary"]
+            if not isinstance(spec, dict):
+                violations.append("app_ipc_schema.phases.ipc_component_boundary must be an object")
+            else:
+                if tuple(spec.get("branches") or ()) != tuple(
+                    init_mod.PHASE_BRANCHES.get("ipc_component_boundary", ())  # type: ignore[attr-defined]
+                ):
+                    violations.append(
+                        "app_ipc_schema.phases.ipc_component_boundary.branches "
+                        "drift against init seed"
+                    )
+                if spec.get("artifact_format") != "csv":
+                    violations.append(
+                        "app_ipc_schema.phases.ipc_component_boundary.artifact_format drift"
+                    )
+                if not str(spec.get("boundary_status_rule") or "").strip():
+                    violations.append(
+                        "app_ipc_schema.phases.ipc_component_boundary.boundary_status_rule "
+                        "missing or empty"
+                    )
+                violations += _check_app_csv_artifact_entries(
+                    "app_ipc_schema",
+                    "ipc_component_boundary",
+                    spec.get("artifacts"),
+                    init_mod,
+                    audit_mod,
+                    audit_mod.IPC_BRANCH_ARTIFACTS,  # type: ignore[attr-defined]
+                    {
+                        "artifacts/app/ipc/component-inventory.csv": {
+                            "component_kind": audit_mod.IPC_COMPONENT_KINDS,  # type: ignore[attr-defined]
+                            "exported": audit_mod.IPC_EXPORTED_VALUES,  # type: ignore[attr-defined]
+                        },
+                        "artifacts/app/ipc/deeplink-review-queue.csv": {
+                            "scheme_type": audit_mod.WEBVIEW_SCHEME_TYPES,  # type: ignore[attr-defined]
+                            "jump_target": audit_mod.WEBVIEW_JUMP_TARGETS,  # type: ignore[attr-defined]
+                        },
+                    },
+                )
+                entries = spec.get("artifacts")
+                if isinstance(entries, list):
+                    for entry in entries:
+                        if not isinstance(entry, dict):
+                            continue
+                        requirements = entry.get("row_requirements") or {}
+                        if entry.get("artifact") == "artifacts/app/ipc/component-inventory.csv":
+                            if tuple(requirements.get("reason_required_exported_values") or ()) != (
+                                "true",
+                            ):
+                                violations.append(
+                                    "app_ipc_schema.reason_required_exported_values "
+                                    "drift against audit seed"
+                                )
+                        if entry.get("artifact") == "artifacts/app/ipc/deeplink-review-queue.csv":
+                            if tuple(requirements.get("reason_required_jump_targets") or ()) != tuple(
+                                audit_mod.WEBVIEW_REASON_JUMP_TARGETS  # type: ignore[attr-defined]
+                            ):
+                                violations.append(
+                                    "app_ipc_schema.reason_required_jump_targets "
+                                    "drift against audit seed"
+                                )
+
+    # --- app_cloud_schema：三 phase（3/3/2 分支），两 review JSON + 一 CSV ---
+    cloud = loaded.get("app_cloud_schema.json")
+    if cloud is not None:
+        phases = cloud.get("phases")
+        if not isinstance(phases, dict) or tuple(phases.keys()) != tuple(
+            init_mod.CLOUD_REVIEW_BRANCHES  # type: ignore[attr-defined]
+        ):
+            violations.append(
+                "app_cloud_schema.phases must match init CLOUD_REVIEW_BRANCHES exactly"
+            )
+        violations += _check_app_phase_specs("app_cloud_schema", cloud, init_mod)
+        violations += _check_app_review_json_fields(
+            "app_cloud_schema", cloud, init_mod, audit_mod
+        )
+        fields = cloud.get("artifact_fields")
+        if isinstance(fields, dict) and tuple(fields.get("review_json_phases") or ()) != (
+            "cloud_function_testing",
+            "cloud_storage_acl_testing",
+        ):
+            violations.append(
+                "app_cloud_schema.artifact_fields.review_json_phases drift"
+            )
+        if isinstance(phases, dict):
+            for phase, expected_format in (
+                ("cloud_function_testing", "review_json"),
+                ("cloud_storage_acl_testing", "review_json"),
+                ("third_party_sdk_platform_boundary", "csv"),
+            ):
+                spec = phases.get(phase)
+                if isinstance(spec, dict) and spec.get("artifact_format") != expected_format:
+                    violations.append(
+                        f"app_cloud_schema.phases.{phase}.artifact_format drift"
+                    )
+            tp_spec = phases.get("third_party_sdk_platform_boundary")
+            if isinstance(tp_spec, dict):
+                if tuple(tp_spec.get("csv_fields") or ()) != tuple(
+                    init_mod.REVIEW_CSV_ARTIFACTS.get(  # type: ignore[attr-defined]
+                        "artifacts/app/cloud/third-party-boundary.csv", ()
+                    )
+                ):
+                    violations.append(
+                        "app_cloud_schema.third_party_sdk_platform_boundary.csv_fields "
+                        "drift against init seed"
+                    )
+                if tuple(tp_spec.get("service_types") or ()) != tuple(
+                    audit_mod.THIRD_PARTY_SERVICE_TYPES  # type: ignore[attr-defined]
+                ):
+                    violations.append(
+                        "app_cloud_schema.third_party_sdk_platform_boundary.service_types "
+                        "drift against audit seed"
+                    )
+                if set(tp_spec.get("attribution_values") or []) != set(
+                    audit_mod.THIRD_PARTY_ATTRIBUTION_VALUES  # type: ignore[attr-defined]
+                ):
+                    violations.append(
+                        "app_cloud_schema.third_party_sdk_platform_boundary."
+                        "attribution_values drift against audit seed"
+                    )
+    return violations
+
+
+_APP_ENGINE_MODULES: dict[str, object] = {}
+
+
+def _app_engine_module(module_name: str) -> tuple[object | None, str | None]:
+    """按真实仓库加载 src/authorized_assessment/app/ 引擎常量（实现常量来自
+    SCRIPT_ROOT，契约数据来自 --root——同 _app_skill_module 模式）。进程内缓存。"""
+    module = _APP_ENGINE_MODULES.get(module_name)
+    if module is not None:
+        return module, None
+    try:
+        import importlib
+
+        module = importlib.import_module(f"authorized_assessment.app.{module_name}")
+    except Exception as exc:  # noqa: BLE001 - 校验器必须报告而非崩溃
+        return None, f"app engine module import failed ({module_name}): {exc}"
+    _APP_ENGINE_MODULES[module_name] = module
+    return module, None
+
+
+def _check_app_engine_csv_entries(
+    name: str,
+    phase: str,
+    spec: dict,
+    engine_mod: object,
+    artifacts_attr: str,
+    csv_fields_attr: str,
+    row_enums_attr: str,
+    branch_artifacts_attr: str,
+) -> list[str]:
+    """webview/ipc 契约的多 CSV 产物 ↔ 引擎常量同步（路径顺序/表头/行级枚举/
+    分支→产物映射；engine_mod 属性来自真实仓库）。"""
+    violations: list[str] = []
+    entries = spec.get("artifacts")
+    if not isinstance(entries, list):
+        violations.append(f"{name}.phases.{phase}.artifacts must be a list")
+        return violations
+    actual_paths = tuple(
+        entry.get("artifact") for entry in entries if isinstance(entry, dict)
+    )
+    if actual_paths != tuple(getattr(engine_mod, artifacts_attr)):
+        violations.append(f"{name}.phases.{phase}.artifacts paths drift against engine")
+        return violations
+    csv_fields = getattr(engine_mod, csv_fields_attr)
+    row_enums = getattr(engine_mod, row_enums_attr)
+    branch_artifacts = getattr(engine_mod, branch_artifacts_attr)
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        rel = entry.get("artifact")
+        if tuple(entry.get("csv_fields") or ()) != tuple(csv_fields.get(rel, ())):
+            violations.append(
+                f"{name}.phases.{phase}.artifacts[{rel}].csv_fields drift against engine"
+            )
+        expected_enums = row_enums.get(rel, {})
+        enums = entry.get("row_enums")
+        if not isinstance(enums, dict) or set(enums) != set(expected_enums) or any(
+            tuple(enums.get(column) or ()) != tuple(values)
+            for column, values in expected_enums.items()
+        ):
+            violations.append(
+                f"{name}.phases.{phase}.artifacts[{rel}].row_enums drift against engine"
+            )
+        mapped = sorted(
+            branch for branch, artifact in branch_artifacts.items() if artifact == rel
+        )
+        if sorted(entry.get("branches") or []) != mapped:
+            violations.append(
+                f"{name}.phases.{phase}.artifacts[{rel}].branches drift against engine "
+                "branch-to-artifact map"
+            )
+    return violations
+
+
+def check_app_engine_sync(root: Path) -> list[str]:
+    """APP 流 B5+B6（W19）：契约 ↔ src/authorized_assessment/app/ 引擎常量同步
+    校验。B5 覆盖四模块（hardening/static_extraction/webview/ipc）与共享骨架
+    （app_review_common 12-key 形状/authorization_basis/coverage 六值）；B6 覆盖
+    九模块（auth 三件 + local/crypto + reconciliation + cloud 三件）——至此全部
+    app_* 契约↔引擎↔init 种子三处同源。引擎常量取自真实仓库（SCRIPT_ROOT），
+    契约数据取 --root（篡改负例有效）。"""
+    violations: list[str] = []
+    arc_mod, err = _app_engine_module("app_review_common")
+    if err:
+        return [err]
+    hir_mod, err = _app_engine_module("hardening_integrity_review")
+    if err:
+        return violations + [err]
+    wbr_mod, err = _app_engine_module("webview_bridge_review")
+    if err:
+        return violations + [err]
+    ipr_mod, err = _app_engine_module("ipc_component_review")
+    if err:
+        return violations + [err]
+    sex_mod, err = _app_engine_module("static_extraction")
+    if err:
+        return violations + [err]
+
+    # --- app_storage_package_schema ↔ hardening 引擎 + 共享骨架 ---
+    storage, err = _load_json(root / "contracts" / "app_storage_package_schema.json")
+    if err:
+        violations.append(err)
+    else:
+        phase = hir_mod.HARDENING_PHASE  # type: ignore[attr-defined]
+        spec = (storage.get("phases") or {}).get(phase)
+        if not isinstance(spec, dict):
+            violations.append(f"app_storage_package_schema.phases.{phase} missing")
+        else:
+            if tuple(spec.get("branches") or ()) != tuple(
+                hir_mod.HARDENING_REVIEW_BRANCHES  # type: ignore[attr-defined]
+            ):
+                violations.append(
+                    f"app_storage_package_schema.phases.{phase}.branches drift against engine"
+                )
+            if spec.get("artifact") != hir_mod.HARDENING_REVIEW_ARTIFACT:  # type: ignore[attr-defined]
+                violations.append(
+                    f"app_storage_package_schema.phases.{phase}.artifact drift against engine"
+                )
+        if storage.get("contract") != hir_mod.APP_STORAGE_PACKAGE_CONTRACT:  # type: ignore[attr-defined]
+            violations.append("app_storage_package_schema.contract drift against engine")
+        if storage.get("schema_version") != hir_mod.APP_STORAGE_PACKAGE_SCHEMA_VERSION:  # type: ignore[attr-defined]
+            violations.append("app_storage_package_schema.schema_version drift against engine")
+        # 只观察不绕过：加固特征分支永不升级（契约描述"加固 so 特征只记 signal"）。
+        if "hardening_obfuscation_markers" in (
+            hir_mod.HARDENING_UPGRADE_RULES  # type: ignore[attr-defined]
+        ):
+            violations.append(
+                "hardening engine must never upgrade hardening_obfuscation_markers "
+                "(packer signatures are signal only)"
+            )
+        fields = storage.get("artifact_fields")
+        if isinstance(fields, dict):
+            if tuple(fields.get("row_fields") or ()) != tuple(
+                arc_mod.APP_REVIEW_ROW_FIELDS  # type: ignore[attr-defined]
+            ):
+                violations.append(
+                    "app_storage_package_schema.artifact_fields.row_fields drift against engine"
+                )
+            if tuple(fields.get("summary_fields") or ()) != tuple(
+                arc_mod.APP_REVIEW_SUMMARY_FIELDS  # type: ignore[attr-defined]
+            ):
+                violations.append(
+                    "app_storage_package_schema.artifact_fields.summary_fields drift against engine"
+                )
+            if tuple(fields.get("artifact_keys") or ()) != tuple(
+                arc_mod.APP_REVIEW_ARTIFACT_KEYS  # type: ignore[attr-defined]
+            ):
+                violations.append(
+                    "app_storage_package_schema.artifact_fields.artifact_keys drift against engine"
+                )
+        if set(storage.get("authorization_basis_values") or []) != set(
+            arc_mod.APP_AUTHORIZATION_BASIS_VALUES  # type: ignore[attr-defined]
+        ):
+            violations.append(
+                "app_storage_package_schema.authorization_basis_values drift against engine"
+            )
+
+    # --- app_webview_schema ↔ webview 引擎（含 reason 判定子集） ---
+    webview, err = _load_json(root / "contracts" / "app_webview_schema.json")
+    if err:
+        violations.append(err)
+    else:
+        spec = (webview.get("phases") or {}).get("webview_bridge_links")
+        if not isinstance(spec, dict):
+            violations.append("app_webview_schema.phases.webview_bridge_links missing")
+        else:
+            if tuple(spec.get("branches") or ()) != tuple(
+                wbr_mod.WEBVIEW_REVIEW_BRANCHES  # type: ignore[attr-defined]
+            ):
+                violations.append(
+                    "app_webview_schema.phases.webview_bridge_links.branches drift against engine"
+                )
+            violations += _check_app_engine_csv_entries(
+                "app_webview_schema",
+                "webview_bridge_links",
+                spec,
+                wbr_mod,
+                "WEBVIEW_ARTIFACTS",
+                "WEBVIEW_CSV_FIELDS",
+                "WEBVIEW_ROW_ENUMS",
+                "WEBVIEW_BRANCH_ARTIFACTS",
+            )
+            for entry in spec.get("artifacts") or []:
+                if not isinstance(entry, dict):
+                    continue
+                requirements = entry.get("row_requirements") or {}
+                if entry.get("artifact") == wbr_mod.WEBVIEW_BRIDGE_METHOD_CSV:  # type: ignore[attr-defined]
+                    if tuple(requirements.get("reason_required_capabilities") or ()) != tuple(
+                        wbr_mod.WEBVIEW_BRIDGE_REASON_CAPABILITIES  # type: ignore[attr-defined]
+                    ):
+                        violations.append(
+                            "app_webview_schema.reason_required_capabilities drift against engine"
+                        )
+                if entry.get("artifact") == wbr_mod.WEBVIEW_DEEP_LINK_QUEUE_CSV:  # type: ignore[attr-defined]
+                    if tuple(requirements.get("reason_required_jump_targets") or ()) != tuple(
+                        wbr_mod.WEBVIEW_REASON_JUMP_TARGETS  # type: ignore[attr-defined]
+                    ):
+                        violations.append(
+                            "app_webview_schema.reason_required_jump_targets drift against engine"
+                        )
+
+    # --- app_ipc_schema ↔ ipc 引擎（App 特有，含 exported 判定子集） ---
+    ipc, err = _load_json(root / "contracts" / "app_ipc_schema.json")
+    if err:
+        violations.append(err)
+    else:
+        spec = (ipc.get("phases") or {}).get("ipc_component_boundary")
+        if not isinstance(spec, dict):
+            violations.append("app_ipc_schema.phases.ipc_component_boundary missing")
+        else:
+            if tuple(spec.get("branches") or ()) != tuple(
+                ipr_mod.IPC_REVIEW_BRANCHES  # type: ignore[attr-defined]
+            ):
+                violations.append(
+                    "app_ipc_schema.phases.ipc_component_boundary.branches drift against engine"
+                )
+            violations += _check_app_engine_csv_entries(
+                "app_ipc_schema",
+                "ipc_component_boundary",
+                spec,
+                ipr_mod,
+                "IPC_ARTIFACTS",
+                "IPC_CSV_FIELDS",
+                "IPC_ROW_ENUMS",
+                "IPC_BRANCH_ARTIFACTS",
+            )
+            for entry in spec.get("artifacts") or []:
+                if not isinstance(entry, dict):
+                    continue
+                requirements = entry.get("row_requirements") or {}
+                if entry.get("artifact") == ipr_mod.IPC_COMPONENT_INVENTORY_CSV:  # type: ignore[attr-defined]
+                    if tuple(requirements.get("reason_required_exported_values") or ()) != tuple(
+                        ipr_mod.IPC_REASON_EXPORTED_VALUES  # type: ignore[attr-defined]
+                    ):
+                        violations.append(
+                            "app_ipc_schema.reason_required_exported_values drift against engine"
+                        )
+                if entry.get("artifact") == ipr_mod.IPC_DEEPLINK_QUEUE_CSV:  # type: ignore[attr-defined]
+                    if tuple(requirements.get("reason_required_jump_targets") or ()) != tuple(
+                        ipr_mod.IPC_REASON_JUMP_TARGETS  # type: ignore[attr-defined]
+                    ):
+                        violations.append(
+                            "app_ipc_schema.reason_required_jump_targets drift against engine"
+                        )
+
+    # --- B6：app_auth_schema ↔ auth 三模块引擎（5/5/4 分支） ---
+    auth, err = _load_json(root / "contracts" / "app_auth_schema.json")
+    if err:
+        violations.append(err)
+    else:
+        ple_mod, m_err = _app_engine_module("platform_login_exchange")
+        stl_mod, m_err2 = _app_engine_module("session_token_lifecycle")
+        srr_mod, m_err3 = _app_engine_module("signature_replay_review")
+        if m_err or m_err2 or m_err3:
+            violations.append(m_err or m_err2 or m_err3 or "app auth engine import failed")
+        else:
+            for mod, phase, branches_attr, artifact_attr in (
+                (ple_mod, "platform_login_exchange", "PLATFORM_LOGIN_BRANCHES", "PLATFORM_LOGIN_REVIEW_ARTIFACT"),
+                (stl_mod, "session_token_lifecycle", "SESSION_TOKEN_BRANCHES", "SESSION_TOKEN_REVIEW_ARTIFACT"),
+                (srr_mod, "signature_replay", "SIGNATURE_REPLAY_BRANCHES", "SIGNATURE_REPLAY_REVIEW_ARTIFACT"),
+            ):
+                spec = (auth.get("phases") or {}).get(phase)
+                if not isinstance(spec, dict):
+                    violations.append(f"app_auth_schema.phases.{phase} missing")
+                    continue
+                if tuple(spec.get("branches") or ()) != tuple(getattr(mod, branches_attr)):
+                    violations.append(
+                        f"app_auth_schema.phases.{phase}.branches drift against engine"
+                    )
+                if spec.get("artifact") != getattr(mod, artifact_attr):
+                    violations.append(
+                        f"app_auth_schema.phases.{phase}.artifact drift against engine"
+                    )
+            if auth.get("contract") != ple_mod.APP_AUTH_CONTRACT:  # type: ignore[attr-defined]
+                violations.append("app_auth_schema.contract drift against engine")
+            if auth.get("schema_version") != ple_mod.APP_AUTH_SCHEMA_VERSION:  # type: ignore[attr-defined]
+                violations.append("app_auth_schema.schema_version drift against engine")
+            if tuple(auth.get("phases") or {}) != tuple(ple_mod.AUTH_PHASES):  # type: ignore[attr-defined]
+                violations.append("app_auth_schema.phases must match engine AUTH_PHASES exactly")
+            artifacts_map = {p: s.get("artifact") for p, s in (auth.get("phases") or {}).items() if isinstance(s, dict)}
+            if artifacts_map != dict(ple_mod.AUTH_REVIEW_ARTIFACTS):  # type: ignore[attr-defined]
+                violations.append("app_auth_schema artifact paths drift against engine AUTH_REVIEW_ARTIFACTS")
+            fields = auth.get("artifact_fields")
+            if isinstance(fields, dict):
+                if tuple(fields.get("row_fields") or ()) != tuple(arc_mod.APP_REVIEW_ROW_FIELDS):  # type: ignore[attr-defined]
+                    violations.append("app_auth_schema.artifact_fields.row_fields drift against engine")
+                if tuple(fields.get("summary_fields") or ()) != tuple(arc_mod.APP_REVIEW_SUMMARY_FIELDS):  # type: ignore[attr-defined]
+                    violations.append("app_auth_schema.artifact_fields.summary_fields drift against engine")
+                if tuple(fields.get("artifact_keys") or ()) != tuple(arc_mod.APP_REVIEW_ARTIFACT_KEYS):  # type: ignore[attr-defined]
+                    violations.append("app_auth_schema.artifact_fields.artifact_keys drift against engine")
+            if set(auth.get("authorization_basis_values") or []) != set(
+                arc_mod.APP_AUTHORIZATION_BASIS_VALUES  # type: ignore[attr-defined]
+            ):
+                violations.append("app_auth_schema.authorization_basis_values drift against engine")
+            # 红线锚点：signature_replay 永不自动重放任何请求（含只读）。
+            if not any("永不自动重放" in inv for inv in srr_mod.SIGNATURE_REPLAY_INVARIANTS):  # type: ignore[attr-defined]
+                violations.append(
+                    "signature_replay engine invariants must state 永不自动重放任何请求（含只读）"
+                )
+            if "永不自动重放" not in str(srr_mod.SIGNATURE_REPLAY_OFFLINE_RULE):  # type: ignore[attr-defined]
+                violations.append("signature_replay engine offline rule must state 永不自动重放")
+
+    # --- B6：app_storage_package_schema ↔ local/crypto 引擎（5/4 分支 + platform 列） ---
+    storage_b6, err = _load_json(root / "contracts" / "app_storage_package_schema.json")
+    if err:
+        violations.append(err)
+    else:
+        lde_mod, m_err = _app_engine_module("local_data_exposure")
+        csr_mod, m_err2 = _app_engine_module("crypto_secret_review")
+        if m_err or m_err2:
+            violations.append(m_err or m_err2 or "app storage engine import failed")
+        else:
+            for mod, phase, branches_attr, artifact_attr in (
+                (lde_mod, "local_data_exposure", "LOCAL_DATA_BRANCHES", "LOCAL_DATA_REVIEW_ARTIFACT"),
+                (csr_mod, "crypto_and_secret_handling", "CRYPTO_SECRET_BRANCHES", "CRYPTO_SECRET_REVIEW_ARTIFACT"),
+            ):
+                spec = (storage_b6.get("phases") or {}).get(phase)
+                if not isinstance(spec, dict):
+                    violations.append(f"app_storage_package_schema.phases.{phase} missing")
+                    continue
+                if tuple(spec.get("branches") or ()) != tuple(getattr(mod, branches_attr)):
+                    violations.append(
+                        f"app_storage_package_schema.phases.{phase}.branches drift against engine"
+                    )
+                if spec.get("artifact") != getattr(mod, artifact_attr):
+                    violations.append(
+                        f"app_storage_package_schema.phases.{phase}.artifact drift against engine"
+                    )
+            # 行内 platform 列 android/ios：常量单一来源 + 两模块共享同一筛选实现。
+            if lde_mod.APP_PLATFORM_VALUES != ("android", "ios"):  # type: ignore[attr-defined]
+                violations.append("local_data engine APP_PLATFORM_VALUES must be (android, ios)")
+            if getattr(csr_mod, "screen_platform_tagged_observations", None) is not getattr(
+                lde_mod, "screen_platform_tagged_observations", None
+            ):
+                violations.append(
+                    "local_data/crypto platform-tagged screening must share a single "
+                    "implementation (hosted in local_data_exposure)"
+                )
+            # secret_candidate 红线锚点。
+            if "secret_candidate" not in str(csr_mod.SECRET_CANDIDATE_RED_LINE):  # type: ignore[attr-defined]
+                violations.append(
+                    "crypto engine must carry the secret_candidate red line (unproven secrets stay signal)"
+                )
+
+    # --- B6：app_reconciliation_schema ↔ 对账引擎（五分支 + 十态 + 判定子集） ---
+    recon, err = _load_json(root / "contracts" / "app_reconciliation_schema.json")
+    if err:
+        violations.append(err)
+    else:
+        sdr_mod, m_err = _app_engine_module("static_dynamic_reconciliation")
+        if m_err:
+            violations.append(m_err)
+        else:
+            spec = (recon.get("phases") or {}).get("static_dynamic_reconciliation")
+            if not isinstance(spec, dict):
+                violations.append(
+                    "app_reconciliation_schema.phases.static_dynamic_reconciliation missing"
+                )
+            else:
+                if tuple(spec.get("branches") or ()) != tuple(sdr_mod.RECONCILIATION_BRANCHES):  # type: ignore[attr-defined]
+                    violations.append(
+                        "app_reconciliation_schema.branches drift against engine"
+                    )
+                if spec.get("artifact") != sdr_mod.RECONCILIATION_ARTIFACT:  # type: ignore[attr-defined]
+                    violations.append(
+                        "app_reconciliation_schema.artifact drift against engine"
+                    )
+                if tuple(spec.get("csv_fields") or ()) != tuple(sdr_mod.RECONCILIATION_CSV_FIELDS):  # type: ignore[attr-defined]
+                    violations.append(
+                        "app_reconciliation_schema csv_fields drift against engine"
+                    )
+                if tuple(spec.get("endpoint_states") or ()) != tuple(sdr_mod.RECONCILIATION_ENDPOINT_STATES):  # type: ignore[attr-defined]
+                    violations.append(
+                        "app_reconciliation_schema.endpoint_states drift against engine"
+                    )
+                if tuple(spec.get("judgment_states") or ()) != tuple(sdr_mod.RECONCILIATION_JUDGMENT_STATES):  # type: ignore[attr-defined]
+                    violations.append(
+                        "app_reconciliation_schema.judgment_states drift against engine"
+                    )
+            if recon.get("contract") != sdr_mod.APP_RECONCILIATION_CONTRACT:  # type: ignore[attr-defined]
+                violations.append("app_reconciliation_schema.contract drift against engine")
+            if recon.get("schema_version") != sdr_mod.APP_RECONCILIATION_SCHEMA_VERSION:  # type: ignore[attr-defined]
+                violations.append("app_reconciliation_schema.schema_version drift against engine")
+            # 红线锚点：对账永不发新请求。
+            if "永不发新请求" not in str(sdr_mod.RECONCILIATION_NO_PROBE_RULE):  # type: ignore[attr-defined]
+                violations.append(
+                    "reconciliation engine must state 永不发新请求 (offline comparison only)"
+                )
+
+    # --- B6：app_cloud_schema ↔ cloud 三模块引擎（3/3/2 分支，两 review JSON + 一 CSV） ---
+    cloud, err = _load_json(root / "contracts" / "app_cloud_schema.json")
+    if err:
+        violations.append(err)
+    else:
+        cfr_mod, m_err = _app_engine_module("cloud_function_review")
+        cse_mod, m_err2 = _app_engine_module("cloud_storage_review")
+        tpr_mod, m_err3 = _app_engine_module("third_party_boundary_review")
+        if m_err or m_err2 or m_err3:
+            violations.append(m_err or m_err2 or m_err3 or "app cloud engine import failed")
+        else:
+            for mod, phase, branches_attr, artifact_attr in (
+                (cfr_mod, "cloud_function_testing", "CLOUD_FUNCTION_BRANCHES", "CLOUD_FUNCTION_REVIEW_ARTIFACT"),
+                (cse_mod, "cloud_storage_acl_testing", "CLOUD_STORAGE_BRANCHES", "CLOUD_STORAGE_REVIEW_ARTIFACT"),
+                (tpr_mod, "third_party_sdk_platform_boundary", "THIRD_PARTY_BRANCHES", "THIRD_PARTY_BOUNDARY_ARTIFACT"),
+            ):
+                spec = (cloud.get("phases") or {}).get(phase)
+                if not isinstance(spec, dict):
+                    violations.append(f"app_cloud_schema.phases.{phase} missing")
+                    continue
+                if tuple(spec.get("branches") or ()) != tuple(getattr(mod, branches_attr)):
+                    violations.append(
+                        f"app_cloud_schema.phases.{phase}.branches drift against engine"
+                    )
+                if spec.get("artifact") != getattr(mod, artifact_attr):
+                    violations.append(
+                        f"app_cloud_schema.phases.{phase}.artifact drift against engine"
+                    )
+            if cloud.get("contract") != cfr_mod.APP_CLOUD_CONTRACT:  # type: ignore[attr-defined]
+                violations.append("app_cloud_schema.contract drift against engine")
+            if cloud.get("schema_version") != cfr_mod.APP_CLOUD_SCHEMA_VERSION:  # type: ignore[attr-defined]
+                violations.append("app_cloud_schema.schema_version drift against engine")
+            if tuple(cloud.get("phases") or {}) != tuple(cfr_mod.APP_CLOUD_PHASES):  # type: ignore[attr-defined]
+                violations.append("app_cloud_schema.phases must match engine APP_CLOUD_PHASES exactly")
+            artifacts_map = {p: s.get("artifact") for p, s in (cloud.get("phases") or {}).items() if isinstance(s, dict)}
+            if artifacts_map != dict(cfr_mod.APP_CLOUD_ARTIFACTS):  # type: ignore[attr-defined]
+                violations.append("app_cloud_schema artifact paths drift against engine APP_CLOUD_ARTIFACTS")
+            fields = cloud.get("artifact_fields")
+            if isinstance(fields, dict) and tuple(fields.get("review_json_phases") or ()) != tuple(
+                cfr_mod.APP_CLOUD_REVIEW_JSON_PHASES  # type: ignore[attr-defined]
+            ):
+                violations.append(
+                    "app_cloud_schema.artifact_fields.review_json_phases drift against engine"
+                )
+            tp_spec = (cloud.get("phases") or {}).get("third_party_sdk_platform_boundary")
+            if isinstance(tp_spec, dict):
+                if tuple(tp_spec.get("csv_fields") or ()) != tuple(tpr_mod.THIRD_PARTY_CSV_FIELDS):  # type: ignore[attr-defined]
+                    violations.append(
+                        "app_cloud_schema.third_party_sdk_platform_boundary.csv_fields "
+                        "drift against engine"
+                    )
+                if tuple(tp_spec.get("service_types") or ()) != tuple(tpr_mod.THIRD_PARTY_SERVICE_TYPES):  # type: ignore[attr-defined]
+                    violations.append(
+                        "app_cloud_schema.third_party_sdk_platform_boundary.service_types "
+                        "drift against engine"
+                    )
+                if set(tp_spec.get("attribution_values") or []) != set(
+                    tpr_mod.THIRD_PARTY_ATTRIBUTION_VALUES  # type: ignore[attr-defined]
+                ):
+                    violations.append(
+                        "app_cloud_schema.third_party_sdk_platform_boundary."
+                        "attribution_values drift against engine"
+                    )
+
+    # --- B6：九模块零网络红线（AST import 扫描；signature_replay 尤其不得含
+    #     任何发请求代码路径） ---
+    import ast as _ast
+
+    for module_name in (
+        "platform_login_exchange",
+        "session_token_lifecycle",
+        "signature_replay_review",
+        "local_data_exposure",
+        "crypto_secret_review",
+        "static_dynamic_reconciliation",
+        "cloud_function_review",
+        "cloud_storage_review",
+        "third_party_boundary_review",
+    ):
+        source = (SCRIPT_ROOT / "src" / "authorized_assessment" / "app" / f"{module_name}.py").read_text(
+            encoding="utf-8"
+        )
+        forbidden: set[str] = set()
+        for node in _ast.walk(_ast.parse(source)):
+            roots: set[str] = set()
+            if isinstance(node, _ast.Import):
+                roots = {alias.name.split(".")[0] for alias in node.names}
+            elif isinstance(node, _ast.ImportFrom) and node.module:
+                roots = {node.module.split(".")[0]}
+            forbidden |= roots & {"requests", "httpx", "urllib", "urllib3", "socket", "http", "ssl", "subprocess"}
+        if forbidden:
+            violations.append(
+                f"{module_name} must not import network/subprocess modules: {sorted(forbidden)}"
+            )
+
+    # --- static_extraction ↔ init 种子与子进程纪律锚点 ---
+    init_mod, init_err = _app_skill_module("init_app_engagement.py")
+    if init_err:
+        violations.append(init_err)
+    else:
+        if tuple(sex_mod.DECODING_LEDGER_FIELDS) != tuple(  # type: ignore[attr-defined]
+            init_mod.DECODING_FIELDS  # type: ignore[attr-defined]
+        ):
+            violations.append(
+                "static_extraction.DECODING_LEDGER_FIELDS drift against init seed"
+            )
+    if getattr(sex_mod, "DEFAULT_TIMEOUT_SECONDS", None) != 600:  # type: ignore[attr-defined]
+        violations.append("static_extraction.DEFAULT_TIMEOUT_SECONDS must be 600 (§7.1)")
+    if getattr(sex_mod, "ALLOWED_MANAGED_TOOL_PREFIX", "") != "tools/managed/app":  # type: ignore[attr-defined]
+        violations.append("static_extraction.ALLOWED_MANAGED_TOOL_PREFIX drift (managed app tools only)")
+    for module_name in ("hardening_integrity_review", "static_extraction"):
+        engine, _err = _app_engine_module(module_name)
+        doc = str(getattr(engine, "__doc__", "") or "")
+        if "只观察不绕过" not in doc:
+            violations.append(
+                f"{module_name} docstring must state the observe-only red line (只观察不绕过)"
+            )
+    import re as _re
+
+    static_source = (SCRIPT_ROOT / "src" / "authorized_assessment" / "app" / "static_extraction.py").read_text(
+        encoding="utf-8"
+    )
+    if _re.search(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]", static_source):
+        violations.append(
+            "static_extraction must not hardcode absolute tool paths (resolve from registry/config)"
+        )
+    return violations
+
+
 def check_state_model_drift(root: Path = SCRIPT_ROOT) -> list[str]:
     """契约 ↔ 实现常量交叉校验（实现模块来自仓库真实代码；契约读 --root 指向的根）。"""
     violations: list[str] = []
@@ -1576,6 +2706,88 @@ def check_report_policy_schema(root: Path) -> list[str]:
     return violations
 
 
+def check_app_graph_contract(root: Path) -> list[str]:
+    """APP 流 B9（W21）：app_graph_schema 契约结构校验 + 契约 ↔ app_graph 工厂
+    ↔ init 种子三方同源。实现常量（orchestration.app_graph / init 脚本）来自真实
+    仓库（SCRIPT_ROOT），契约数据来自 --root——篡改负例有效。"""
+    violations: list[str] = []
+    for cname in REQUIRED_APP_GRAPH_CONTRACTS:
+        data, err = _load_json(root / "contracts" / cname)
+        if err:
+            violations.append(err)
+            continue
+        if not isinstance(data, dict):
+            violations.append(f"{cname} must be an object")
+            continue
+        if data.get("$id") != "app_graph_schema":
+            violations.append(f"{cname}.$id must be app_graph_schema")
+        if data.get("properties", {}).get("workflow") != {"const": "app"}:
+            violations.append(f"{cname}.properties.workflow must be const 'app'")
+        node_defs = data.get("$defs", {}).get("node", {})
+        if node_defs.get("properties", {}).get("cursor_file") != {"const": "phase_status.app.json"}:
+            violations.append(
+                f"{cname}.$defs.node.properties.cursor_file must be "
+                "const phase_status.app.json"
+            )
+        for enum_field, defs_key in (("kind", "node"), ("kind", "edge")):
+            enum_value = (
+                data.get("$defs", {}).get(defs_key, {}).get("properties", {}).get(enum_field, {}).get("enum")
+            )
+            if not isinstance(enum_value, list) or not enum_value:
+                violations.append(f"{cname}.$defs.{defs_key}.properties.{enum_field}.enum missing")
+        safety = data.get("x-app-safety", {})
+        if not isinstance(safety, dict):
+            violations.append(f"{cname}.x-app-safety missing")
+        else:
+            if safety.get("status_file") != "phase_status.app.json":
+                violations.append(f"{cname}.x-app-safety.status_file must be phase_status.app.json")
+            forbidden = safety.get("forbidden_cursors")
+            for cursor in ("phase_status.json", "phase_status.miniapp.json", "run_status.json"):
+                if not isinstance(forbidden, list) or cursor not in forbidden:
+                    violations.append(
+                        f"{cname}.x-app-safety.forbidden_cursors missing {cursor}"
+                    )
+            if safety.get("approval_gates") != ["device_instrumentation", "app_hardened_unpack"]:
+                violations.append(
+                    f"{cname}.x-app-safety.approval_gates must be "
+                    "[device_instrumentation, app_hardened_unpack]"
+                )
+            if safety.get("approval_gates_auto_advance") is not False:
+                violations.append(
+                    f"{cname}.x-app-safety.approval_gates_auto_advance must be false"
+                )
+
+    # --- 契约 ↔ 工厂 ↔ init 种子三方同源（实现来自 SCRIPT_ROOT，契约来自 --root）---
+    try:
+        from jsonschema import Draft202012Validator
+
+        import authorized_assessment.orchestration.app_graph as app_graph_mod
+    except Exception as exc:  # noqa: BLE001 - 校验器必须报告而非崩溃
+        return violations + [f"app graph module import failed: {exc}"]
+    init_mod, err = _app_skill_module("init_app_engagement.py")
+    if err:
+        return violations + [err]
+    schema_data, err = _load_json(root / "contracts" / "app_graph_schema.json")
+    if err or not isinstance(schema_data, dict):
+        return violations + ([err] if err else ["app_graph_schema.json must be an object"])
+    graph = app_graph_mod.build_app_graph(created_at="fixed")
+    schema_errors = [
+        f"app_graph_schema rejects factory output: {error.message}"
+        for error in Draft202012Validator(schema_data).iter_errors(graph.to_dict())
+    ]
+    violations += schema_errors
+    impl_errors = app_graph_mod.validate_app_graph(graph)
+    if impl_errors:
+        violations += [f"app_graph factory self-validation failed: {item}" for item in impl_errors]
+    if tuple(app_graph_mod.APP_PHASES) != tuple(init_mod.PHASES):  # type: ignore[attr-defined]
+        violations.append("app_graph.APP_PHASES drift against init PHASES seed")
+    if dict(app_graph_mod.APP_BRANCHES) != dict(init_mod.PHASE_BRANCHES):  # type: ignore[attr-defined]
+        violations.append("app_graph.APP_BRANCHES drift against init PHASE_BRANCHES seed")
+    if tuple(app_graph_mod.APP_APPROVAL_GATES) != ("device_instrumentation", "app_hardened_unpack"):
+        violations.append("app_graph.APP_APPROVAL_GATES must match the dual-key approval gates")
+    return violations
+
+
 def collect_violations(root: Path = SCRIPT_ROOT, *, include_reporting: bool = False) -> list[str]:
     contracts = root / "contracts"
     violations: list[str] = []
@@ -1593,6 +2805,9 @@ def collect_violations(root: Path = SCRIPT_ROOT, *, include_reporting: bool = Fa
     violations += check_miniapp_reconciliation_schema(root)
     violations += check_miniapp_cloud_schema(root)
     violations += check_miniapp_webview_schema(root)
+    violations += check_app_contracts(root)
+    violations += check_app_engine_sync(root)
+    violations += check_app_graph_contract(root)
     violations += check_orchestration_contracts(root)
     if include_reporting:
         violations += check_report_policy_schema(root)

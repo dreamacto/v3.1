@@ -36,7 +36,13 @@ def validate_graph(graph: GraphSpec | Mapping[str, Any]) -> list[str]:
     if len(ids) != len(set(ids)):
         errors.append("duplicate node_id")
     known = {item for item in ids if item is not None}
-    expected_cursor = "phase_status.miniapp.json" if data.get("workflow") == "xcx" else "phase_status.json"
+    expected_cursors = {
+        "wz": "phase_status.json",
+        "fh": "phase_status.json",
+        "xcx": "phase_status.miniapp.json",
+        "app": "phase_status.app.json",
+    }
+    expected_cursor = expected_cursors.get(data.get("workflow"), "phase_status.json")
     control_kinds = {"scope", "approval", "verifier"}
     seen_controls: set[str] = set()
     for index, node in enumerate(nodes):

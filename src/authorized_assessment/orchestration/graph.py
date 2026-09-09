@@ -6,11 +6,11 @@ from typing import Any, Mapping
 
 SCHEMA_VERSION = "1.0"
 GRAPH_VERSION = "1.0"
-WORKFLOWS = frozenset({"wz", "xcx", "fh"})
+WORKFLOWS = frozenset({"wz", "xcx", "fh", "app"})
 NODE_KINDS = frozenset({"task", "worker", "gate", "checkpoint", "approval", "verifier"})
 EDGE_KINDS = frozenset({"depends_on", "produces", "gates", "joins"})
 JOINS = frozenset({"all", "any", "barrier"})
-CURSORS = frozenset({"phase_status.json", "phase_status.miniapp.json"})
+CURSORS = frozenset({"phase_status.json", "phase_status.miniapp.json", "phase_status.app.json"})
 
 
 def _now() -> str:

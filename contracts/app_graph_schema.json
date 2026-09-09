@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "app_graph_schema",
+  "title": "APP mobile-app orchestration graph",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["graph_id", "assessment_id", "workflow", "nodes", "edges", "created_at"],
+  "properties": {
+    "graph_id": {"type": "string", "pattern": "^graph_[A-Za-z0-9._-]+$"},
+    "assessment_id": {"type": "string", "minLength": 1},
+    "workflow": {"const": "app"},
+    "created_at": {"type": "string", "minLength": 1},
+    "nodes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/node"}},
+    "edges": {"type": "array", "items": {"$ref": "#/$defs/edge"}}
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_id", "kind", "phase", "order"],
+      "properties": {
+        "node_id": {"type": "string", "pattern": "^node_[A-Za-z0-9._-]+$"},
+        "kind": {"enum": ["task", "worker", "gate", "checkpoint", "approval", "verifier"]},
+        "phase": {"type": "string", "minLength": 1},
+        "order": {"type": "integer", "minimum": 0},
+        "join": {"enum": ["all", "any", "barrier"]},
+        "cursor_file": {"const": "phase_status.app.json"},
+        "timeout_seconds": {"type": "integer", "minimum": 1},
+        "retry_limit": {"type": "integer", "minimum": 0},
+        "cancellable": {"type": "boolean"}
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edge_id", "from", "to", "kind"],
+      "properties": {
+        "edge_id": {"type": "string", "minLength": 1},
+        "from": {"type": "string", "pattern": "^node_[A-Za-z0-9._-]+$"},
+        "to": {"type": "string", "pattern": "^node_[A-Za-z0-9._-]+$"},
+        "kind": {"enum": ["depends_on", "produces", "gates", "joins"]}
+      }
+    }
+  },
+  "x-app-safety": {
+    "status_file": "phase_status.app.json",
+    "forbidden_cursors": ["phase_status.json", "phase_status.miniapp.json", "run_status.json"],
+    "approval_and_verifier_are_control_nodes": true,
+    "approval_gates": ["device_instrumentation", "app_hardened_unpack"],
+    "approval_gates_auto_advance": false,
+    "approval_gates_rule": "双钥匙（脚本审批门 + 会话内人工显式确认）缺一不可；两个审批门节点在图中只有 gates 入边、没有任何出边，图编排永不自动推进它们，解锁只能由操作者显式驱动"
+  }
+}

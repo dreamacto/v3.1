@@ -59,7 +59,7 @@
   ],
   "tools": {
     "afrog": [
-      "{base}/tools/managed/afrog/3.5.3/afrog.exe",
+      "{base}/tools/managed/afrog/3.5.6/afrog.exe",
       "{base}/tools/afrog.exe",
       "{tianhu}/tools/gui_other/afrog/afrog.exe"
     ],
@@ -99,7 +99,7 @@
       "{base}/tools/shiro/shiro/ShiroLoader.bat"
     ],
     "nuclei": [
-      "{base}/tools/managed/nuclei/3.8.0/nuclei.exe",
+      "{base}/tools/managed/nuclei/3.11.1/nuclei.exe",
       "{tianhu}/tools/gui_scan/nuclei/nuclei.exe"
     ],
     "httpx": [
@@ -121,6 +121,12 @@
     "tidefinger": [
       "{base}/tools/managed/tidefinger/3.2.3/TideFinger_windows_amd64_v3.2.3.exe",
       "{tianhu}/tools/gui_shouji/tide/TideFinger_windows_amd64_v3.2.3.exe"
+    ],
+    "jadx": [
+      "{base}/tools/managed/app/jadx/1.5.6/bin/jadx.bat"
+    ],
+    "apktool": [
+      "{base}/tools/managed/app/apktool/3.0.3/apktool_3.0.3.jar"
     ]
   }
 }

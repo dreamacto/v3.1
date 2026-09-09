@@ -5,14 +5,15 @@
     {
       "tool_id": "afrog",
       "display_name": "Afrog",
-      "path": "tools/managed/afrog/3.5.3/afrog.exe",
-      "version": "3.5.3",
+      "path": "tools/managed/afrog/3.5.6/afrog.exe",
+      "version": "3.5.6",
       "status": "active",
       "runtime": "native",
       "dependencies": [],
       "known_limitations": "仅限已确认的中国 OA 产品模板；固定本地 POC 目录，禁止运行时联网更新 POC；输出为候选，不构成漏洞确认",
       "config_key": "afrog",
-      "notes": "POC 目录固定本地；更新提示只记录不自动执行"
+      "notes": "POC 目录固定本地；更新提示只记录不自动执行；2026-09-07 版本滚动 3.5.3→3.5.6（旧目录保留一个周期），首次使用前执行一次 afrog -update 固化 PoC 库",
+      "checked_at": "2026-09-07"
     },
     {
       "tool_id": "ehole",
@@ -122,14 +123,15 @@
     {
       "tool_id": "nuclei",
       "display_name": "Nuclei",
-      "path": "tools/managed/nuclei/3.8.0/nuclei.exe",
-      "version": "3.8.0",
+      "path": "tools/managed/nuclei/3.11.1/nuclei.exe",
+      "version": "3.11.1",
       "status": "active",
       "runtime": "native",
       "dependencies": [],
       "known_limitations": "固定引擎版本+本地模板目录，禁止模板自更新；intrusive 模板审批门；输出候选需人工复核",
       "config_key": "nuclei",
-      "notes": "模板目录见 nuclei_templates 条目；OOB 依赖本地 interactsh"
+      "notes": "模板目录见 nuclei_templates 条目；OOB 依赖本地 interactsh；2026-09-07 版本滚动 3.8.0→3.11.1（旧目录保留一个周期）",
+      "checked_at": "2026-09-07"
     },
     {
       "tool_id": "httpx",
@@ -255,15 +257,16 @@
     {
       "tool_id": "nuclei_templates",
       "display_name": "Nuclei Templates (pinned)",
-      "path": "tools/managed/nuclei-templates/10.4.4",
-      "version": "10.4.4",
+      "path": "tools/managed/nuclei-templates/10.4.8",
+      "version": "10.4.8",
       "status": "active",
       "runtime": "data",
       "dependencies": [
         "nuclei"
       ],
       "known_limitations": "固定本地模板目录，禁止自更新；模板版本以目录标识记录，template_manifest_hash 为可选字段非强制门",
-      "notes": "配套 nuclei 引擎 3.8.0；版本事实见 tools/managed/tool_release_manifest.json"
+      "notes": "配套 nuclei 引擎 3.11.1；版本事实见 tools/managed/tool_release_manifest.json；2026-09-07 版本滚动 10.4.4→10.4.8（旧目录保留一个周期），检测-only 白名单 wordlists/nuclei_detect_include.ids 由 10.4.8 生成",
+      "checked_at": "2026-09-07"
     },
     {
       "tool_id": "oa-exptool",
@@ -291,67 +294,73 @@
       "tool_id": "ffuf",
       "display_name": "ffuf",
       "path": "tools/managed/ffuf/ffuf.exe",
-      "version": "",
-      "status": "unavailable",
+      "version": "2.2.1",
+      "status": "active",
       "runtime": "native",
       "dependencies": [],
       "known_limitations": "受控目录候选：固定小词表 wordlists/ffuf_dirs_small.txt、单目标、-t 1、-delay>=2s、无递归；200 不等于敏感资源存在；候选行只产 signal/candidate（src/authorized_assessment/triage/ffuf_directory_candidates.py）",
-      "notes": "本地未下载（禁止自动下载）；候选路径为操作者将来放置位置，放置后由 rebuild --check fail-closed 复核"
+      "notes": "2026-09-07 下载落位并登记激活（方案 §5.1）；本地验证 -t 1 -p 1 精确 1 req/s（tools/_downloads_20260907/ffuf_sim.json）",
+      "checked_at": "2026-09-07"
     },
     {
       "tool_id": "xsstrike",
       "display_name": "XSStrike",
       "path": "tools/managed/xsstrike/XSStrike/xsstrike.py",
-      "version": "",
-      "status": "unavailable",
+      "version": "master@2026-09",
+      "status": "active",
       "runtime": "python",
       "dependencies": [],
       "known_limitations": "单候选 XSS 验证（规格 7.2 二选一胜出，Dalfox 不引入）：只处理已筛选反射/DOM 候选，单目标单参数，no_crawl/no_blind/no_update；结果回指请求/响应/浏览器上下文/证据索引（src/authorized_assessment/triage/single_candidate_xss_validation.py）",
-      "notes": "本地未下载（禁止自动下载）；Python 运行时匹配项目规范"
+      "notes": "2026-09-07 git 克隆落位并登记激活（方案 §5.1）；Python 运行时匹配项目规范",
+      "checked_at": "2026-09-07"
     },
     {
       "tool_id": "dalfox",
       "display_name": "Dalfox",
       "path": "tools/managed/dalfox/dalfox.exe",
-      "version": "",
-      "status": "unavailable",
+      "version": "3.2.2",
+      "status": "active",
       "runtime": "native",
       "dependencies": [],
       "known_limitations": "未选用：规格 7.2 单候选 XSS 验证二选一，XSStrike 胜出；本条目仅为显式留档，不接入任何 strategy 角色",
-      "notes": "本地未下载；二选一败者显式登记 unavailable（严格规范第十节：不得写成模糊 or）"
+      "notes": "2026-09-07 下载落位并登记（败者留档激活登记，方案 §5.1）；仍不接入任何 strategy 角色",
+      "checked_at": "2026-09-07"
     },
     {
       "tool_id": "subfinder",
       "display_name": "subfinder",
       "path": "tools/managed/subfinder/subfinder.exe",
-      "version": "",
-      "status": "unavailable",
+      "version": "2.16.0",
+      "status": "active",
       "runtime": "native",
       "dependencies": [],
       "known_limitations": "仅被动模式：-active 主动枚举旗标在计划路径级禁入；新发现域名必须 confirmation_required（src/authorized_assessment/discovery/passive_subdomain_candidates.py）",
-      "notes": "本地未下载；tools/dddd/lib/subfinder 为 vendored 源码非可执行文件"
+      "notes": "2026-09-07 下载落位并登记激活（方案 §5.1）；tools/dddd/lib/subfinder 为 vendored 源码非可执行文件",
+      "checked_at": "2026-09-07"
     },
     {
       "tool_id": "dnsx",
       "display_name": "dnsx",
       "path": "tools/managed/dnsx/dnsx.exe",
-      "version": "",
-      "status": "unavailable",
+      "version": "1.3.1",
+      "status": "active",
       "runtime": "native",
       "dependencies": [],
       "known_limitations": "仅已知候选清单解析（-l 模式）：-w 字典爆破旗标禁入；只解析 filter_known_candidates 放行的 in_scope host",
-      "notes": "本地未下载；tools/dddd/lib/dnsx 为 vendored 源码非可执行文件"
+      "notes": "2026-09-07 下载落位并登记激活（方案 §5.1）；tools/dddd/lib/dnsx 为 vendored 源码非可执行文件",
+      "checked_at": "2026-09-07"
     },
     {
       "tool_id": "semgrep",
       "display_name": "Semgrep",
-      "path": "tools/managed/semgrep/semgrep.exe",
-      "version": "",
-      "status": "unavailable",
-      "runtime": "native",
+      "path": "tools/managed/semgrep/python",
+      "version": "1.x@2026-09",
+      "status": "active",
+      "runtime": "python",
       "dependencies": [],
-      "known_limitations": "离线白盒（规格 7.2 二选一胜出，CodeQL 不引入）：规则固定本地、--config 拒绝 auto/p//r//registry/http(s)、--metrics=off 禁遥测；静态命中只产 signal，不能自动变成漏洞（src/authorized_assessment/analysis/static_analysis_signals.py）",
-      "notes": "本地未下载；规则集由操作者固定本地提供，本模块不捆绑不下载"
+      "known_limitations": "离线白盒（规格 7.2 二选一胜出，CodeQL 不引入）：规则固定本地、--config 拒绝 auto/p//r//registry/http(s)、--metrics=off 禁遥测；静态命中只产 signal，不能自动变成漏洞（src/authorized_assessment/analysis/static_analysis_signals.py）；vendored at tools/managed/semgrep/python（无独立 exe，含 cp312-win_amd64 原生 wheel），以 PYTHONPATH=tools\\managed\\semgrep\\python + 天狐 py3.12 运行 python -m semgrep",
+      "notes": "2026-09-07 pip vendored 落位（355MB）并登记激活（方案 §5.1 附录 E 路径语义）；规则集由操作者固定本地提供，本模块不捆绑不下载",
+      "checked_at": "2026-09-07"
     },
     {
       "tool_id": "codeql",
@@ -363,6 +372,98 @@
       "dependencies": [],
       "known_limitations": "未选用：规格 7.2 离线白盒二选一，Semgrep 胜出；本条目仅为显式留档，不接入任何 strategy 角色",
       "notes": "本地未下载；二选一败者显式登记 unavailable（严格规范第十节：不得写成模糊 or）"
+    },
+    {
+      "tool_id": "jadx",
+      "display_name": "jadx",
+      "path": "tools/managed/app/jadx/1.5.6/bin/jadx.bat",
+      "version": "1.5.6",
+      "status": "active",
+      "runtime": "java",
+      "dependencies": [
+        "Java 11+（天狐 Java_11_win 已验证）"
+      ],
+      "known_limitations": "dex→java 静态反编译输出仅为源码线索，混淆/加固会降低可读性；输出不构成漏洞确认；不支持壳保护 dex 的完整还原",
+      "source_url": "https://github.com/skylot/jadx/releases/tag/v1.5.6",
+      "sha256": "545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974",
+      "notes": "2026-09-07 下载解包，zip 官方 sha256 校验一致；--version 实测 1.5.6",
+      "config_key": "jadx"
+    },
+    {
+      "tool_id": "apktool",
+      "display_name": "Apktool",
+      "path": "tools/managed/app/apktool/3.0.3/apktool_3.0.3.jar",
+      "version": "3.0.3",
+      "status": "active",
+      "runtime": "java",
+      "dependencies": [
+        "Java（java -jar 调用，天狐 Java_11_win 已验证）"
+      ],
+      "known_limitations": "资源与 AndroidManifest 解码工具，输出为结构线索；不做漏洞判断；加固包资源可能不完整",
+      "source_url": "https://github.com/iBotPeaches/Apktool/releases/tag/v3.0.3",
+      "sha256": "dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423",
+      "notes": "2026-09-07 下载落位；--version 实测 3.0.3",
+      "config_key": "apktool"
+    },
+    {
+      "tool_id": "JSFinder",
+      "display_name": "JSFinder",
+      "path": "tools/managed/jsfinder/JSFinder.py",
+      "version": "master@2026-09",
+      "status": "active",
+      "runtime": "python",
+      "dependencies": [],
+      "known_limitations": "JS 端点/子域全量离线提取（application_mapping JS chunk 全量解析，修复 P1-6 抽样欠饱和）：默认只对已落盘的 JS 文件做本地解析（-f 文件输入），联网爬取/深度抓取模式不属默认授权档；产物并入 endpoint-inventory 候选——命中不等于敏感资源，仍需人工 disposition",
+      "notes": "2026-09-07 下载落位并登记（方案 §5.3，P1-⑦ 接入 wz application_mapping）",
+      "checked_at": "2026-09-07"
+    },
+    {
+      "tool_id": "arjun",
+      "display_name": "Arjun",
+      "path": "tools/managed/arjun/python",
+      "version": "2.2.7",
+      "status": "active",
+      "runtime": "python",
+      "dependencies": [],
+      "known_limitations": "HTTP 参数发现（input_testing 参数发现子步骤，Tier B 单目标批次档）：单 host ≤1 次运行、GET 优先；pip vendored 于 tools/managed/arjun/python（无独立 exe），以 PYTHONPATH=tools/managed/arjun/python + python -m arjun 运行（Windows 下正斜杠路径等价）；发现的隐藏参数只是攻击面线索非漏洞证据，预算制由 input_testing probe 白名单与预算审计约束（每 host ≤10 参数×单发）",
+      "notes": "2026-09-07 pip vendored 落位并登记（方案 §5.3，P1-⑥ W-4 预算制引用）",
+      "checked_at": "2026-09-07"
+    },
+    {
+      "tool_id": "jwt_tool",
+      "display_name": "jwt_tool",
+      "path": "tools/managed/jwt_tool/jwt_tool/jwt_tool.py",
+      "version": "master@2026-09",
+      "status": "active",
+      "runtime": "python",
+      "dependencies": [],
+      "known_limitations": "JWT 解码/离线审计为主（authenticated_testing 的 JWT 候选复核）；alg 混淆/篡改类验证属 Tier B/C 审批门，输出只产候选与线索不自动 confirmed；token 原文不入日志/报告/ledger（凭证纪律）",
+      "notes": "2026-09-07 下载落位并登记（方案 §5.3；接入 authenticated_testing 属后续使用面）",
+      "checked_at": "2026-09-07"
+    },
+    {
+      "tool_id": "wxapkg",
+      "display_name": "wxapkg (backup unpacker)",
+      "path": "tools/managed/wxapkg/wxapkg_1.5.0_windows_amd64.exe",
+      "version": "1.5.0",
+      "status": "active",
+      "runtime": "native",
+      "dependencies": [],
+      "known_limitations": "小程序解包备用引擎（XCX X-3）：decrypt_wxapkg/full_unpack 失败时的备用还原器，CLI 为主（wxapkg -d <输入目录> -o <输出目录>），GUI 版 wxapkg-gui-windows-x64.exe 仅供操作者手动兜底；结果仍走 source-map.csv 溯源与 decoding-ledger.csv 记录（成功/失败都要入台账，不得静默绕过）",
+      "notes": "2026-09-07 下载落位并登记（方案 §5.3，P1-⑤ X-3 接入 xcx workflow §2 工具链表）",
+      "checked_at": "2026-09-07"
+    },
+    {
+      "tool_id": "FingerprintHub",
+      "display_name": "FingerprintHub (fingerprint data)",
+      "path": "tools/managed/fingerprinthub/FingerprintHub-main",
+      "version": "main@2026-09",
+      "status": "active",
+      "runtime": "data",
+      "dependencies": [],
+      "known_limitations": "指纹数据备库，git 克隆失败故用 zip 解压版（2026-09 0x727 快照，24,959 文件）；runtime=data 不直接执行；数据清理与指纹比对接入属 P2 ⑩，本轮仅登记；指纹命中只产 technology/面板线索，不构成漏洞判定",
+      "notes": "2026-09-07 zip 解压落位并登记（方案 §5.3；比对接线留给 P2 ⑩）",
+      "checked_at": "2026-09-07"
     }
   ]
 }

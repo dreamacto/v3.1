@@ -84,13 +84,13 @@ def test_entries_not_inside_phases_and_phases_untouched():
     for name in ORCHESTRATION_SUBPHASES:
         assert name not in strategy["phases"]
     assert len(strategy["phases"]) >= 38
-    # 审批门不被改写（决定①与完成条件：不改变现有审批门）
+    # 审批门不被改写（决定①与完成条件：既有三门原样保留；后续批次只增不减）
     assert "approval_gated_phases" in strategy
-    assert set(strategy["approval_gated_phases"]) == {
+    assert {
         "credential_testing",
         "exploitability",
         "post_exploitation",
-    }
+    } <= set(strategy["approval_gated_phases"])
 
 
 def test_notes_declare_module_mapping_and_batch14_boundary():

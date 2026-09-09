@@ -1,6 +1,6 @@
 # AGENT_MANIFEST.md — 机器可读工具清单
 
-> 由 scripts/gen_agent_manifest.py 生成，勿手改（生成时间：2026-09-01 10:41）
+> 由 scripts/gen_agent_manifest.py 生成，勿手改（生成时间：2026-09-07 20:09）
 
 > 用法：AI 选工具前先查本清单；所有新工具/新 phase 由生成器登记，不手写本文件。
 
@@ -18,6 +18,8 @@
 - **credential_testing**：primary=`manual_minimal_check` backup=`weak_passwd_scanner.py_or_hydra_only_when_approved`（mode=disabled）。Credential spraying and brute force remain approval-gated. Custom credential scripts are helpers only; they are not default validators and must use tiny dictionaries, low rate, and lockout-safe limits.
 - **exploitability**：primary=`manual_minimal_validation` backup=`specialized_mature_tool_or_custom_helper_when_approved`（mode=disabled）。Stop once permission or impact is proven. Custom exploit helpers must not be used full-scope and should only assist one approved candidate at a time.
 - **post_exploitation**：primary=`none_by_default` backup=`none_by_default`（mode=disabled）。Webshell, C2, tunnels, internal scanning, and persistence are not default workflow tools.
+- **device_instrumentation**：primary=`manual_frida_or_objection_only_when_approved` backup=`manual_device_observation`（mode=disabled）。root/越狱、装用户 CA、frida-server、重打包、SSL pinning bypass、反调试 patch：脚本审批门+会话内人工显式确认，双钥匙缺一不可；绕过是测试技术不是漏洞结论；工具未放置前 registry 保持 unavailable。
+- **app_hardened_unpack**：primary=`manual_operator_supplied_unpacked_material_only` backup=`none_by_default`（mode=disabled）。加固壳包默认 blocked；脱壳(FRIDA-DEXDump/BlackDex 等)需指定测试设备+显式批准；工具 registry 登记 unavailable 直到操作者放置并报备。
 
 ## 桌面入口（bat）
 
@@ -32,7 +34,7 @@
 | 一键IDOR差分_只读.bat | 交互输入 run 目录/会话文件/端点文件，跑 idor_triage.py 只读差分（.venv） | 只读差分 | `一键IDOR差分_只读.bat` |
 | 一键竞态靶场.bat | 本地起 race_lab_server.py（8892）：/claim 漏洞真值 /claim_safe 负例 /transfer 超扣；判据校准教学用 | 本地靶场，零外联 | `一键竞态靶场.bat` |
 | 一键竞态测试_授权目标.bat | 读配方D 产出的 race_config.json 对授权目标执行竞态；开场强制 YES 确认；必须 .venv | 审批门：写端点需 write_risk_ack | `一键竞态测试_授权目标.bat` |
-| AI配方_一键复制.bat | 菜单选 1-6 把 prompts/ 配方A-F 全文复制到剪贴板，粘贴给任意 AI 启动对应会话（copy_prompt.py） | 离线复制，零网络请求 | `AI配方_一键复制.bat` |
+| AI配方_一键复制.bat | 菜单选 1-10 复制配方A-F/P/WZ/XCX/Z；P 为统一流程路由入口，WZ/XCX 为直接快捷入口（copy_prompt.py） | 离线复制，零网络请求 | `AI配方_一键复制.bat` |
 
 ## 根目录核心脚本（50 个）
 
@@ -110,7 +112,7 @@
 
 ### fingerprint
 - primary：`tool_fingerprint_httpx.py`；backup：`runner_rules_or_ehole_tidefinger_sample`（mode=rate_controlled_tool_first）
-- 说明：Use httpx technology detection one target at a time with an outer delay; keep runner rules as fallback categories.
+- 说明：Use httpx technology detection one target at a time with an outer delay; keep runner rules as fallback categories. FingerprintHub (tools/managed/fingerprinthub/FingerprintHub-main, registry active, runtime=data) is a local fingerprint data backup library (zip-extracted 2026-09 snapshot) for offline comparison only; data-cleanup and comparison wiring is P2 item 10, not in current scope, and a fingerprint hit is technology/panel knowledge, never a finding by itself.
 - primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
 - backup：`runner_rules_or_ehole_tidefinger_sample`（风险级 **只读**）；路径：—
 
@@ -133,13 +135,13 @@
 
 ### application_mapping
 - primary：`manual_browser_or_proxy`；backup：`api_discovery.py_plus_katana`（mode=reuse_crawl_candidates_then_applicability_first）
-- 说明：wz application_mapping phase split into five auditable subphases (graphql_mapping/websocket_mapping/file_surface_mapping/auth_surface_mapping/webhook_mapping). Primary executor is the wz AI session over browser/proxy/JS evidence; backup reuses crawl_api_js candidates (api_discovery.py output) instead of re-crawling. Applicability first: only applicable surfaces enter testing; not_applicable must be recorded with a reason. Each subphase records one substatus (tested/not_applicable/blocked/approval_required/needs_manual_validation/inconclusive) in phase_status.json substatuses and writes artifacts under artifacts/application-map/ (graphql-manifest.json, websocket-inventory.csv, file-surface-inventory.csv, auth-surface-inventory.csv, webhook-inventory.csv; seven-field rows per coverage_substatus_schema). init_engagement.py seeds the skeletons; audit_engagement.py refuses unproven completion.
+- 说明：wz application_mapping phase split into five auditable subphases (graphql_mapping/websocket_mapping/file_surface_mapping/auth_surface_mapping/webhook_mapping). Primary executor is the wz AI session over browser/proxy/JS evidence; backup reuses crawl_api_js candidates (api_discovery.py output) instead of re-crawling. Applicability first: only applicable surfaces enter testing; not_applicable must be recorded with a reason. Each subphase records one substatus (tested/not_applicable/blocked/approval_required/needs_manual_validation/inconclusive) in phase_status.json substatuses and writes artifacts under artifacts/application-map/ (graphql-manifest.json, websocket-inventory.csv, file-surface-inventory.csv, auth-surface-inventory.csv, webhook-inventory.csv; seven-field rows per coverage_substatus_schema). init_engagement.py seeds the skeletons; audit_engagement.py refuses unproven completion. Offline full JS endpoint extraction (P1-6 fix, 2026-09-07): instead of JS-chunk sampling, run JSFinder (tools/managed/jsfinder/JSFinder.py, registry active) over collected JS chunks with local file input — read-only local parsing, no crawling — and merge extracted endpoints/subdomains into the endpoint inventory with provenance; extraction is surface knowledge, never a finding.
 - primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
 - backup：`api_discovery.py_plus_katana`（风险级 **只读**）；路径：—
 
 ### wechat_miniapp_discovery
 - primary：`wechat_miniapp_discovery.py`；backup：`manual_wechat_or_search_review`（mode=confirm_candidates_and_scope）
-- 说明：Generate mini-program, official-account, QR-code, and search-dork clues. Feed only authorized source domains from wechat_subdomain_scan_targets.txt back into subdomain/alive scanning; keep WeChat platform and third-party links pending review.
+- 说明：Generate mini-program, official-account, QR-code, and search-dork clues. Feed only authorized source domains from wechat_subdomain_scan_targets.txt back into subdomain/alive scanning; keep WeChat platform and third-party links pending review. The xcx decode/unpack chain (xcx workflow.md §2) retries with the registered backup unpacker wxapkg (tools/managed/wxapkg/wxapkg_1.5.0_windows_amd64.exe, registry active, CLI primary with GUI manual fallback; X-3, 2026-09-07) when decrypt_wxapkg/full_unpack fail — retries happen in the same phase and outputs stay source-map/decoding-ledger traced.
 - primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
 
 ### platform_login_exchange
@@ -154,7 +156,7 @@
 
 ### signature_replay
 - primary：`manual_offline_review_orchestration_only`；backup：`manual_review`（mode=offline_review_only）
-- 说明：Spec 6.5 signature_replay (Batch 10, xcx authentication_session split). Offline replay-hypothesis and observational screening only, via src/authorized_assessment/miniapp/signature_replay_review.py reusing the shared engine: four branches (nonce_timestamp/signature_canonicalization/replay_window/binding_scope; binding_scope covers signature/nonce context binding, token binding stays in session_token_lifecycle to avoid double counting). Never auto-replays any request (read or write); write actions and concurrency validation remain approval-gated. Observations come only from operator-supplied authorization material or local traffic. Artifact artifacts/miniapp/auth/signature-replay-review.json (contract miniapp_auth_schema). confirmed still requires the five finding gates. duplicate_execution=false.
+- 说明：Spec 6.5 signature_replay (Batch 10, xcx authentication_session split) + P2 X-2 L0 executor (2026-09-07). Two tracks: (1) offline review via src/authorized_assessment/miniapp/signature_replay_review.py reusing the shared engine — four branches (nonce_timestamp/signature_canonicalization/replay_window/binding_scope; binding_scope covers signature/nonce context binding, token binding stays in session_token_lifecycle to avoid double counting); (2) approval-gated L0 executor src/authorized_assessment/miniapp/signature_replay_l0.py (plan+ingest capability module; plan is pure data with zero execution, replay is performed manually by the operator inside the Tier C gate): read-only GET endpoints only, max 3 endpoints per host, single replay per time window (original capture vs T+5s vs T+60s), delay>=3s, write_risk_ack must be false — write/business endpoints are never replayed (hard red line, no approval unlock, fail-closed). The executor module itself Never auto-replays any request (read or write); write actions and concurrency validation remain approval-gated. Observations come only from operator-supplied authorization material or local traffic. Artifacts artifacts/miniapp/auth/signature-replay-review.json and artifacts/miniapp/auth/signature-replay-l0.jsonl (contract miniapp_auth_schema, l0_executor section). confirmed still requires the five finding gates. duplicate_execution=false.
 - primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
 
 ### package_integrity_update_review
@@ -204,9 +206,9 @@
 
 ### xss_candidate_screening
 - primary：`xss_candidate_triage.py`；backup：`nuclei`（mode=single_candidate_manual_validation_only）
-- 说明：Build XSS candidates from discovered parameterized URLs and optionally send one inert GET marker per safe parameter. Stored/blind/script-payload validation and full-scope external scanners are not default automation. 单候选验证能力模块 single_candidate_xss_validation（规格 7.2 二选一引入 XSStrike，registry unavailable，操作者放置并登记 active 前不接入；Dalfox 不引入，显式登记 unavailable）
+- 说明：Build XSS candidates from discovered parameterized URLs and optionally send one inert GET marker per safe parameter. Stored/blind/script-payload validation and full-scope external scanners are not default automation. 单候选验证能力模块 single_candidate_xss_validation（规格 7.2 二选一引入 XSStrike，2026-09-07 下载落位登记 active；单候选约束 no_crawl/no_blind/no_update 不变；Dalfox 败者留档登记 active 但不接入任何 strategy 角色）
 - primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
-- backup：`nuclei`（风险级 **只读**）；路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\nuclei\3.8.0\nuclei.exe（存在）; D:\Desktop\天狐渗透工具箱-社区版V3.0+4.0更新升级包\天狐渗透工具箱-社区版V3.0\tools\gui_scan\nuclei\nuclei.exe（存在）
+- backup：`nuclei`（风险级 **只读**）；路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\nuclei\3.11.1\nuclei.exe（存在）; D:\Desktop\天狐渗透工具箱-社区版V3.0+4.0更新升级包\天狐渗透工具箱-社区版V3.0\tools\gui_scan\nuclei\nuclei.exe（存在）
 
 ### ssrf_candidate_screening
 - primary：`manual_proxy_observational`；backup：`ssrf_triage.py`（mode=approval_gated_probe_only）
@@ -216,13 +218,13 @@
 
 ### input_testing
 - primary：`manual_orchestration_only`；backup：`manual_orchestration_only`（mode=orchestration_only_no_duplicate_execution）
-- 说明：Orchestration-only entry (operator decision batch6_4 ⑥): input_testing only orchestrates its subphases — injection_candidate_screening, parser_deserialization_screening, ssrf_candidate_screening, file_path_candidate_screening (batch 7), browser_boundary_review (batch 7) — and must not re-execute the probe actions already covered by the sqli_candidate_screening / xss_candidate_screening / ssrf_candidate_screening entries or any other phase. Offline pipeline via src/authorized_assessment/triage/input_testing.py: init_input_testing_artifacts seeds artifact skeletons, run_input_testing_screening fans observations through the wired screening subphases and writes candidates plus per-category summaries, audit_input_testing checks existence, row contracts and summary-vs-candidate consistency. Artifacts: artifacts/input-testing/ (injection-category-summary.csv, injection-candidates.jsonl, parser-deserialization-category-summary.csv, parser-deserialization-candidates.jsonl), artifacts/ssrf/ per the ssrf entry, artifacts/browser-boundary/cors-csrf-cache.jsonl and reports/browser-boundary.md for browser_boundary_review, artifacts/file-path/ (file-path-category-summary.csv, file-path-candidates.jsonl) for file_path_candidate_screening. Observations are screening input, never proof of a vulnerability.
+- 说明：Orchestration-only entry (operator decision batch6_4 ⑥) + W-4 受限 probe 预算制（2026-09-07 P1，方案 §3 W-4，Tier B 单目标批次档）: input_testing only orchestrates its subphases — injection_candidate_screening, parser_deserialization_screening, ssrf_candidate_screening, file_path_candidate_screening (batch 7), browser_boundary_review (batch 7) — and the orchestrator itself must not re-execute the probe actions already covered by the sqli_candidate_screening / xss_candidate_screening / ssrf_candidate_screening entries or any other phase. Probe whitelist replaces the former zero-probe rule (no probe tool referenced): injection markers may only run via sqli_triage.py shallow profile (boolean/error differential, no time-based/UNION), xss_candidate_triage.py lazy inert marker, plus one parameter-discovery step via arjun (vendored at tools/managed/arjun/python, GET first, at most one run per host). Budget = per host at most 10 parameters, single shot each; every probe execution is recorded as a row in artifacts/input-testing/probe-ledger.jsonl. Offline pipeline via src/authorized_assessment/triage/input_testing.py: init_input_testing_artifacts seeds artifact skeletons (including the empty probe ledger), run_input_testing_screening fans observations through the wired screening subphases and writes candidates plus per-category summaries, audit_input_testing checks existence, row contracts, summary-vs-candidate consistency, and validates the probe ledger — non-whitelist scripts and over-budget runs (per-host params >10, more than one request per parameter, or a second arjun run on the same host) are rejected as violations. Exploitation-grade tools (sqlmap and anything beyond the whitelist) stay behind the existing approval gates. Artifacts: artifacts/input-testing/ (injection-category-summary.csv, injection-candidates.jsonl, parser-deserialization-category-summary.csv, parser-deserialization-candidates.jsonl, probe-ledger.jsonl), artifacts/ssrf/ per the ssrf entry, artifacts/browser-boundary/cors-csrf-cache.jsonl and reports/browser-boundary.md for browser_boundary_review, artifacts/file-path/ (file-path-category-summary.csv, file-path-candidates.jsonl) for file_path_candidate_screening. Observations are screening input, never proof of a vulnerability.
 - primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
 - backup：`manual_orchestration_only`（风险级 **只读**）；路径：—
 
 ### authenticated_session_review
 - primary：`authenticated_session_review.py`；backup：`manual_browser_or_proxy`（mode=confirm_high_value_authenticated_candidates）
-- 说明：The runner creates a manual login/registration queue. After the operator supplies a valid local session file, review same-host JS and bounded GET-like APIs. Never persist cookies, response values, or downloaded files.
+- 说明：The runner creates a manual login/registration queue. After the operator supplies a valid local session file, review same-host JS and bounded GET-like APIs. Never persist cookies, response values, or downloaded files. JWT candidates in session material decode and audit offline via jwt_tool (tools/managed/jwt_tool/jwt_tool/jwt_tool.py, registry active): decoding/inspection is offline; alg-confusion or tamper validation stays inside Tier B/C approval gates, never automated in bulk, and token values never enter logs, reports, or ledgers.
 - primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
 
 ### idor_diff
@@ -249,8 +251,14 @@
 ### template_validation
 - primary：`nuclei`；backup：`afrog`（mode=confirm_verified_candidates）
 - 说明：Use the pinned managed Nuclei engine and reviewed templates as the general core; use afrog mainly for confirmed Chinese OA products. Filter by technology, severity, and intrusiveness, and never run approval-gated templates automatically.
-- primary 风险级：**只读**；外部工具路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\nuclei\3.8.0\nuclei.exe（存在）; D:\Desktop\天狐渗透工具箱-社区版V3.0+4.0更新升级包\天狐渗透工具箱-社区版V3.0\tools\gui_scan\nuclei\nuclei.exe（存在）；输出：nuclei_results.jsonl
-- backup：`afrog`（风险级 **只读**）；路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\afrog\3.5.3\afrog.exe（存在）; D:\PythonSource\PythonProjects\PythonProject4\tools\afrog.exe（存在）
+- primary 风险级：**只读**；外部工具路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\nuclei\3.11.1\nuclei.exe（存在）; D:\Desktop\天狐渗透工具箱-社区版V3.0+4.0更新升级包\天狐渗透工具箱-社区版V3.0\tools\gui_scan\nuclei\nuclei.exe（存在）；输出：nuclei_results.jsonl
+- backup：`afrog`（风险级 **只读**）；路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\afrog\3.5.6\afrog.exe（存在）; D:\PythonSource\PythonProjects\PythonProject4\tools\afrog.exe（存在）
+
+### known_vuln_triage
+- primary：`nuclei`；backup：`afrog`（mode=cn_oa_product_keyword_only）
+- 说明：detect-only include-list; Tier A pre-authorized; interactive templates excluded. WZ 阶段（application_mapping 之后）：nuclei 仅跑 wordlists/nuclei_detect_include.ids 白名单（政策头=授权边界快照，-rl 1 同 host 串行 -ni 默认关 OOB，见 ROE.md Tier A 常备检测档）；afrog 备引擎仅指纹命中国内 OA 产品时按 Tier B 单目标批次授权跑关键词 PoC（-polite，命中直接 candidate+逐条 Tier C 复核）；触发式产品筛查走既有 *_triage.py 只读档；interactive/exploit 模板永不入白名单。
+- primary 风险级：**只读**；外部工具路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\nuclei\3.11.1\nuclei.exe（存在）; D:\Desktop\天狐渗透工具箱-社区版V3.0+4.0更新升级包\天狐渗透工具箱-社区版V3.0\tools\gui_scan\nuclei\nuclei.exe（存在）；输出：nuclei_results.jsonl
+- backup：`afrog`（风险级 **只读**）；路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\afrog\3.5.6\afrog.exe（存在）; D:\PythonSource\PythonProjects\PythonProject4\tools\afrog.exe（存在）
 
 ### shiro_candidate_screening
 - primary：`shiro_triage.py`；backup：`manual_browser_or_proxy`（mode=review_positive_candidates）
@@ -315,7 +323,7 @@
 ### tomcat_weblogic_validation
 - primary：`nuclei`；backup：`manual_request_review`（mode=confirm_single_candidate_only）
 - 说明：Pinned managed Nuclei engine with reviewed templates only: ghostcat CVE-2020-1938 (network), weblogic CVE-2019-2725/CVE-2020-14882/CVE-2018-2894/CVE-2023-21839, tomcat manager/default-login/jolokia-creds-leak. Verified end-to-end on local sim: ghostcat critical hit; CVE-2020-14882 critical hit and CVE-2023-21839 high hit via self-hosted interactsh (public oast.pro unreachable from this network). Local OOB stack: interactsh-server -d 127.0.0.1 -http-port 8000 -dns-port 30053 -lip 127.0.0.1 -sa (domain MUST equal the nuclei server IP form, i.e. -d 127.0.0.1, else DNS callbacks are not matched), then nuclei -iserver http://127.0.0.1:8000. Independent CLI for 21839: tools\managed\weblogic21839\POC_CVE-2023-21839\CVE-2023-21839.py -ip <t> -p 7001 -l ldap://<oast>/x (pure T3/IIOP handshake, verified 7/7 steps on sim). Approval-gated RCE templates never auto-run; per-host template caps apply.
-- primary 风险级：**只读**；外部工具路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\nuclei\3.8.0\nuclei.exe（存在）; D:\Desktop\天狐渗透工具箱-社区版V3.0+4.0更新升级包\天狐渗透工具箱-社区版V3.0\tools\gui_scan\nuclei\nuclei.exe（存在）；输出：nuclei_results.jsonl
+- primary 风险级：**只读**；外部工具路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\nuclei\3.11.1\nuclei.exe（存在）; D:\Desktop\天狐渗透工具箱-社区版V3.0+4.0更新升级包\天狐渗透工具箱-社区版V3.0\tools\gui_scan\nuclei\nuclei.exe（存在）；输出：nuclei_results.jsonl
 
 ### nacos_candidate_screening
 - primary：`nacos_triage.py`；backup：`manual_browser_or_proxy`（mode=review_positive_candidates）
@@ -325,7 +333,7 @@
 ### nacos_validation
 - primary：`nuclei`；backup：`manual_request_review`（mode=confirm_single_candidate_only）
 - 说明：Pinned managed Nuclei templates only: nacos-auth-bypass, nacos-authentication-bypass, nacos-info-leak, nacos-create-user, nacos-default-login. Do not create users or mutate configuration in the default flow; those require explicit approval.
-- primary 风险级：**只读**；外部工具路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\nuclei\3.8.0\nuclei.exe（存在）; D:\Desktop\天狐渗透工具箱-社区版V3.0+4.0更新升级包\天狐渗透工具箱-社区版V3.0\tools\gui_scan\nuclei\nuclei.exe（存在）；输出：nuclei_results.jsonl
+- primary 风险级：**只读**；外部工具路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\nuclei\3.11.1\nuclei.exe（存在）; D:\Desktop\天狐渗透工具箱-社区版V3.0+4.0更新升级包\天狐渗透工具箱-社区版V3.0\tools\gui_scan\nuclei\nuclei.exe（存在）；输出：nuclei_results.jsonl
 
 ### redis_es_zk_candidate_screening
 - primary：`redis_triage.py`；backup：`manual_browser_or_proxy`（mode=review_positive_candidates）
@@ -335,7 +343,7 @@
 ### redis_es_zk_validation
 - primary：`nuclei`；backup：`manual_request_review`（mode=confirm_single_candidate_only）
 - 说明：Pinned managed Nuclei templates only: exposed-redis/redis-config/redis-info, elasticsearch detect and known info-leak templates. Actual key/value reads or config writes require explicit approval.
-- primary 风险级：**只读**；外部工具路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\nuclei\3.8.0\nuclei.exe（存在）; D:\Desktop\天狐渗透工具箱-社区版V3.0+4.0更新升级包\天狐渗透工具箱-社区版V3.0\tools\gui_scan\nuclei\nuclei.exe（存在）；输出：nuclei_results.jsonl
+- primary 风险级：**只读**；外部工具路径：D:\PythonSource\PythonProjects\PythonProject4\tools\managed\nuclei\3.11.1\nuclei.exe（存在）; D:\Desktop\天狐渗透工具箱-社区版V3.0+4.0更新升级包\天狐渗透工具箱-社区版V3.0\tools\gui_scan\nuclei\nuclei.exe（存在）；输出：nuclei_results.jsonl
 
 ### custom_probe_policy
 - primary：`mature_tool_or_manual_review_for_validation`；backup：`custom_scripts_for_candidate_screening`（mode=candidate_screening_only）
@@ -345,13 +353,101 @@
 
 ### directory_fuzz
 - primary：`dirsearch`；backup：`manual_browser_or_proxy`（mode=important_targets_only）
-- 说明：Use small curated wordlists and low rate. Avoid broad recursion by default. ffuf 受控目录候选能力已登记 registry unavailable（batch16_1 plan+ingest 模块 src/authorized_assessment/triage/ffuf_directory_candidates.py；操作者放置二进制并登记 active 前不接入）
+- 说明：Use small curated wordlists and low rate. Avoid broad recursion by default. ffuf 受控目录候选能力已登记 registry active（2026-09-07 下载落位，方案 §5.1；plan+ingest 模块 src/authorized_assessment/triage/ffuf_directory_candidates.py；运行仍按 Tier B 单目标批次授权，-t 1 -delay>=2s 无递归）
 - primary 风险级：**只读**；外部工具路径：D:\Desktop\天狐渗透工具箱-社区版V3.0+4.0更新升级包\天狐渗透工具箱-社区版V3.0\tools\gui_scan\dirsearch\dirsearch.py（存在）；输出：dirsearch_report.jsonl
 
 ### report
 - primary：`result_prioritizer_and_evidence_builder`；backup：`manual_review`（mode=human_quality_check）
 - 说明：Review priority_targets.json and run_health.json before report drafting.
 - primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_package_unpack
+- primary：`apktool_jadx_managed`；backup：`manual_string_extraction`（mode=sample_or_confirm）
+- 说明：apktool 3.0.3(manifest/资源)+jadx 1.5.6(dex→java)，均为 registry active 管理内工具；壳包解包失败记 blocked，不自动脱壳；子进程超时/输出上限/失败写 decoding-ledger（skills/app/references/package-analysis.md）。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+- backup：`manual_string_extraction`（风险级 **只读**）；路径：—
+
+### app_static_extraction
+- primary：`manual_offline_review_orchestration_only`；backup：`whitebox_triage.py_sink_scan`（mode=offline_review_only）
+- 说明：manifest 深解析(权限/exported/intent-filter/allowBackup/networkSecurityConfig)、secrets/SDK/API 路径模式提取；白盒 sink 复用 whitebox_triage.py 62 条库；secret_candidate 红线；duplicate_execution=false。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+- backup：`whitebox_triage.py_sink_scan`（风险级 **只读**）；路径：—
+
+### app_hardening_integrity_review
+- primary：`manual_offline_review_orchestration_only`；backup：`manual_review`（mode=offline_review_only）
+- 说明：七分支(signing_integrity/hardening_obfuscation_markers/debug_switches/debug_info_exposure/update_endpoint_environment/trusted_update_config/package_version_inventory)；MASVS-RESILIENCE 只观察不绕过；任何 bypass=approval_gated_phases.device_instrumentation。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_dynamic_setup
+- primary：`manual_device_proxy_orchestration_only`；backup：`manual_review`（mode=operator_device_prerequisite）
+- 说明：重量级：指定测试设备登记、代理拓扑、用户 CA 信任观察(Android 7+ networkSecurityConfig)；root/越狱/装证书/装 frida-server=审批门；无设备时该阶段 pending，不阻塞静态流。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_dynamic_mapping
+- primary：`manual_device_proxy_orchestration_only`；backup：`manual_review`（mode=operator_device_prerequisite）
+- 说明：用户旅程→流量基线，只存 endpoint/method/参数名/状态/结构；pinning/反调试/root 检测=控制观察记录；SSL pinning bypass 与 frida 注入=审批门；429/5xx 退避 10s、连续 5 错停 host。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_static_dynamic_reconciliation
+- primary：`manual_offline_review_orchestration_only`；backup：`manual_review`（mode=offline_review_only）
+- 说明：五分支+十态行级枚举，确定性分类与 miniapp Batch12 同构（契约 app_reconciliation_schema）；纯离线对账，永不发新请求验证 unreachable/stale 行；duplicate_execution=false。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_platform_login_exchange
+- primary：`manual_offline_review_orchestration_only`；backup：`manual_review`（mode=offline_review_only）
+- 说明：五分支(oauth_code_one_time/oauth_code_expiry/one_click_login_device_binding/access_token_custody/uid_authorization_basis)（契约 app_auth_schema）；只分析操作者提供材料或本地流量；运营商一键登录 token/device-id 属凭证纪律。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_session_token_lifecycle
+- primary：`manual_offline_review_orchestration_only`；backup：`manual_review`（mode=offline_review_only）
+- 说明：五分支与 xcx 同名(token_rotation/token_revocation_logout/multi_device_login/stale_token_new_api/device_user_tenant_binding)；不自动登录/签发/吊销；写动作审批门；duplicate_execution=false。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_signature_replay
+- primary：`manual_offline_review_orchestration_only`；backup：`manual_review`（mode=offline_review_only）
+- 说明：四分支与 xcx 同名(nonce_timestamp/signature_canonicalization/replay_window/binding_scope)；永不自动重放任何请求(含读)；写与并发验证=审批门；duplicate_execution=false。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_local_data_exposure
+- primary：`manual_offline_review_orchestration_only`；backup：`manual_review`（mode=offline_review_only）
+- 说明：五分支与 xcx 同名，行内 platform 列区分 android(shared_prefs/db/allowBackup 提取面)/ios(keychain/plist/快照)；只用操作者授权材料与指定测试设备；敏感值不进任何产物（契约 app_storage_package_schema）。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_crypto_and_secret_handling
+- primary：`manual_offline_review_orchestration_only`；backup：`manual_review`（mode=offline_review_only）
+- 说明：四分支与 xcx 同名；secret_candidate 红线：未证实有效性的密钥串只是 signal；不做 key 有效性探测、不发请求（契约 app_storage_package_schema）；duplicate_execution=false。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_webview_bridge_links
+- primary：`manual_offline_review_orchestration_only`；backup：`manual_review`（mode=offline_review_only）
+- 说明：三分支 CSV 与 xcx Batch13 同构，路径改 artifacts/app/webview/；七分支一行一分支；不注入/不重放 cookie/token，不从 deeplink 启动外部应用（契约 app_webview_schema）。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_ipc_component_boundary
+- primary：`manual_offline_review_orchestration_only`；backup：`manual_review`（mode=offline_review_only）
+- 说明：App 特有七分支(exported_activity/service/receiver/provider/custom_scheme_deeplink/universal_link/ios_extension_boundary)→artifacts/app/ipc/ 两 CSV（契约 app_ipc_schema）；静态清单离线；实际触发写组件的 intent/deeplink=审批门。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_cloud_function_testing
+- primary：`manual_offline_review_orchestration_only`；backup：`manual_review`（mode=offline_review_only）
+- 说明：三分支与 xcx 同名（契约 app_cloud_schema）；多数 App=not_applicable(带理由)；最小只读验证，不触发写型函数；duplicate_execution=false。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_cloud_storage_acl_testing
+- primary：`manual_offline_review_orchestration_only`；backup：`manual_review`（mode=offline_review_only）
+- 说明：三分支与 xcx 同名；signed_url_binding 不批量读/下载对象内容；duplicate_execution=false。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_third_party_sdk_platform_boundary
+- primary：`manual_offline_review_orchestration_only`；backup：`manual_review`（mode=offline_review_only）
+- 说明：两分支与 xcx 同名（推送/统计/地图/支付 SDK 边界 + 平台共享资产归属）；不触发真实支付；boundary CSV 行归属对齐 hosts.csv 分类状态。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+
+### app_backend_web_api_testing
+- primary：`manual_orchestration_only`；backup：`api_endpoint_confirm.py_plus_idor_triage.py`（mode=reuse_wz_modules_same_host_only）
+- 说明：仅确认归属且 in_scope 的自有后端；api_endpoint_confirm 风险词跳过表与 idor_triage 限制(同 host≥2 凭证、GET/HEAD、delay≥3s、每 host≤5 端点、A 凭证 401/302 即停)原样适用；写/导出/支付=审批门。
+- primary 风险级：**只读**；外部工具路径：—；输出：见对应 runner 输出契约
+- backup：`api_endpoint_confirm.py_plus_idor_triage.py`（风险级 **只读**）；路径：—
 
 ## 本地 MCP 服务（跨 agent 通用）
 

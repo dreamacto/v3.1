@@ -30,12 +30,13 @@
     },
     "crypto_and_secret_handling": {
       "artifact": "artifacts/miniapp/crypto/secret-review.json",
-      "description": "密码学与密钥处理：AppSecret、固定 token、密钥硬编码；自定义加密、弱随机数、密钥派生；包中调试配置和环境密钥（调试开关本身归 package_integrity_update_review 避免重复计数）。发现密钥字符串但无法证明有效性时只能是 secret_candidate，不能直接称为密钥泄露漏洞。",
+      "description": "密码学与密钥处理：AppSecret、固定 token、密钥硬编码；自定义加密、弱随机数、密钥派生；包中调试配置和环境密钥（调试开关本身归 package_integrity_update_review 避免重复计数）；GitHub/搜索引擎被动泄露面 dork（passive_leak_dork，2026-09-07 P1 X-4：零目标接触，命中只产 secret_candidate 线索，该分支永不自动升级）。发现密钥字符串但无法证明有效性时只能是 secret_candidate，不能直接称为密钥泄露漏洞。",
       "branches": [
         "hardcoded_secrets",
         "custom_crypto",
         "weak_random_key_derivation",
-        "debug_config_env_keys"
+        "debug_config_env_keys",
+        "passive_leak_dork"
       ]
     }
   },

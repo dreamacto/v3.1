@@ -15,6 +15,11 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+_ROOT = Path(__file__).resolve().parents[4]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+from src.authorized_assessment.scope import classify_host, normalize_scope_host, registrable_parent, scope_entry_for_host
+
 
 os.environ["PYTHONUTF8"] = "1"
 os.environ["PYTHONIOENCODING"] = "utf-8"
@@ -29,6 +34,7 @@ PHASES = (
     "passive_discovery",
     "active_discovery",
     "application_mapping",
+    "known_vuln_triage",
     "unauthenticated_testing",
     "authenticated_testing",
     "api_testing",
@@ -40,7 +46,6 @@ PHASES = (
     "candidate_validation",
     "evidence",
     "cleanup",
-    "retest",
     "reporting",
 )
 
@@ -53,6 +58,10 @@ SCOPE_FIELDS = (
     "ownership_rationale",
     "permitted_actions",
     "confirmed_at",
+    "matched_scope_anchor",
+    "scope_match_kind",
+    "domain_authorized",
+    "scope_mode",
     "notes",
 )
 
@@ -111,6 +120,16 @@ APPLICATION_MAP_GRAPHQL_MANIFEST = {
     "rows": [],
 }
 
+# known_vuln_triage 三子状态（2026-09-07 P0 接线，方案 §3 W-1）：Tier A 模板检测 /
+# 触发式产品筛查 / 子域接管检查。空串 = 未记录，审计在 phase 完成时强制落盘；
+# 只对新 seed 的 workspace 生效——既有 workspace 的 phase_status.json 无该阶段行，
+# resume 不补插（兼容性硬要求，审计容忍缺失）。
+KNOWN_VULN_TRIAGE_SUBPHASES = (
+    "template_detect",
+    "product_screen",
+    "takeover_check",
+)
+
 
 def now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
@@ -135,13 +154,7 @@ def normalize_host(host: str) -> str:
 
 
 def _registered_parent(host: str) -> str:
-    parts = [p for p in host.split(".") if p]
-    if len(parts) <= 2:
-        return host
-    suffix2 = ".".join(parts[-2:])
-    if suffix2 in {"com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "ac.cn", "mil.cn"} and len(parts) >= 3:
-        return ".".join(parts[-3:])
-    return suffix2
+    return registrable_parent(host)
 
 
 def find_same_asset_engagements(output_root: Path, host: str) -> list[Path]:
@@ -204,6 +217,52 @@ def normalize_target(raw: str) -> dict[str, object]:
     }
 
 
+def append_domain_authorized_subdomain(scope_path: Path, host: str) -> bool:
+    """Idempotently record a discovered child of an authorized domain anchor."""
+    candidate = normalize_scope_host(host)
+    if not candidate or not scope_path.is_file():
+        return False
+    with scope_path.open(encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        rows = list(reader)
+        existing_fields = list(reader.fieldnames or SCOPE_FIELDS)
+    fields = list(dict.fromkeys([*existing_fields, *SCOPE_FIELDS]))
+    if fields != existing_fields:
+        with scope_path.open("w", encoding="utf-8-sig", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+    result = classify_host(candidate, rows)
+    anchor_confirmed = any(
+        normalize_scope_host(row.get("asset")) == result.matched_anchor
+        and str(row.get("scope_state", "")).strip() == "in_scope"
+        and str(row.get("domain_authorized", "")).strip().lower() in {"1", "true", "yes"}
+        for row in rows
+    )
+    if not anchor_confirmed or result.scope_state != "in_scope" or result.match_kind not in {"domain_suffix", "wildcard"}:
+        return False
+    if any(normalize_scope_host(row.get("asset")) == candidate for row in rows):
+        return False
+    row = {field: "" for field in SCOPE_FIELDS}
+    row.update({
+        "asset_id": hashlib.sha256(candidate.encode("utf-8")).hexdigest()[:16],
+        "asset": candidate,
+        "asset_type": "host",
+        "scope_state": "in_scope",
+        "source": "domain_authorized_subdomain",
+        "ownership_rationale": result.reason,
+        "permitted_actions": "read_only",
+        "confirmed_at": now(),
+        "matched_scope_anchor": result.matched_anchor,
+        "scope_match_kind": result.match_kind,
+        "domain_authorized": "true",
+        "notes": "从已登记域级授权根域自动纳入；仍受 active_testing 授权门约束",
+    })
+    with scope_path.open("a", encoding="utf-8-sig", newline="") as handle:
+        csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore").writerow(row)
+    return True
+
+
 def write_csv_if_missing(path: Path, fields: tuple[str, ...], rows: list[dict[str, str]]) -> None:
     if path.exists():
         return
@@ -221,8 +280,14 @@ def write_text_if_missing(path: Path, content: str) -> None:
 
 
 def _upgrade_phase_status_substatuses(phase_path: Path) -> None:
-    """resume 升级（实施规格 5.2）：既有工作区的 application_mapping 行补 substatuses
-    五键种子（空串=未记录），不改动任何既有状态/原因/产物字段；文件损坏时跳过不阻塞。"""
+    """resume 升级（实施规格 5.2 + 2026-09-07 P0）：既有工作区已存在的阶段行补
+    substatuses 种子（空串=未记录），不改动任何既有状态/原因/产物字段，也不给旧
+    工作区插入 known_vuln_triage 阶段行（该阶段只对新 seed 的 engagement 生效）；
+    文件损坏时跳过不阻塞。"""
+    subphase_seeds = {
+        "application_mapping": APPLICATION_MAP_SUBPHASES,
+        "known_vuln_triage": KNOWN_VULN_TRIAGE_SUBPHASES,
+    }
     try:
         payload = json.loads(phase_path.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError):
@@ -231,12 +296,11 @@ def _upgrade_phase_status_substatuses(phase_path: Path) -> None:
         return
     changed = False
     for row in payload["phases"]:
-        if (
-            isinstance(row, dict)
-            and row.get("phase") == "application_mapping"
-            and "substatuses" not in row
-        ):
-            row["substatuses"] = {name: "" for name in APPLICATION_MAP_SUBPHASES}
+        if not (isinstance(row, dict) and "substatuses" not in row):
+            continue
+        seed = subphase_seeds.get(str(row.get("phase") or ""))
+        if seed is not None:
+            row["substatuses"] = {name: "" for name in seed}
             changed = True
     if changed:
         phase_path.write_text(
@@ -248,7 +312,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Initialize a website assessment workspace.")
     parser.add_argument("target", help="Authorized website URL, domain, or IP host.")
     parser.add_argument("--output", required=True, help="Engagement workspace directory.")
-    parser.add_argument("--allow-parallel", action="store_true", help="明确允许为同资产另建平行工作区（默认禁止）")
+    parser.add_argument("--scope-mode", choices=("default_domain", "exact"), default="default_domain", help="Scope interpretation; default_domain derives the registrable parent, exact keeps only the supplied host")
     parser.add_argument("--add-site", dest="add_site", action="store_true", default=None, help="resume 时允许把同父域的新 host 扩展进本工作区（默认允许，需父域已登记域级授权）")
     parser.add_argument("--no-add-site", dest="add_site", action="store_false", help="resume 拒绝站点扩展")
     parser.add_argument("--name", default="", help="Optional engagement name.")
@@ -282,6 +346,7 @@ def main() -> int:
 
     # 同资产发现（2026-08-23）：新建前先找同资产既有工作区
     site_extension = False
+    domain_anchor_confirmed = False
     if not args.resume:
         prior = find_same_asset_engagements(root, str(target["host"]))
         if prior and not getattr(args, "allow_parallel", False):
@@ -312,8 +377,9 @@ def main() -> int:
                             asset = (row.get("asset") or "").strip().lower().lstrip("*.")
                             rationale = " ".join(str(row.get(k, "")) for k in ("source", "notes", "ownership_rationale")).lower()
                             if asset == parent_new or asset == str(target["host"]):
-                                covered = True
-                                break
+                                if str(row.get("domain_authorized", "")).strip().lower() in {"1", "true", "yes"} or "*." + parent_new in rationale:
+                                    covered = True
+                                    break
                             # 域级授权登记形态：wildcard source/notes 或 *.父域 字样
                             if ("wildcard" in rationale or "整域" in rationale or "*." + parent_new in rationale) and asset.endswith("." + parent_new):
                                 covered = True
@@ -323,6 +389,7 @@ def main() -> int:
                           f"登记域级授权；先补登（操作者确认）或用 --no-add-site 明确拒绝扩展。", file=sys.stderr)
                     return 3
                 site_extension = True
+                domain_anchor_confirmed = True
                 print(f"[*] 同资产站点扩展：{existing_host} -> 追加 {target['host']}（{parent_new} 域级授权已登记）")
             else:
                 print("ERROR: Resume target does not match the existing engagement.", file=sys.stderr)
@@ -331,6 +398,7 @@ def main() -> int:
     for relative in (
         "artifacts",
         "artifacts/application-map",
+        "artifacts/known-vuln",
         "evidence/raw",
         "evidence/redacted",
         "logs",
@@ -380,21 +448,32 @@ def main() -> int:
             json.dumps(engagement, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
 
-    hosts = list(dict.fromkeys([str(target["host"]), *extra_hosts]))
+    raw_hosts = list(dict.fromkeys([str(target["host"]), *extra_hosts]))
+    domain_anchor = registrable_parent(str(target["host"])) if args.scope_mode == "default_domain" else ""
+    domain_root = bool(domain_anchor)
+    hosts = list(dict.fromkeys(([domain_anchor] if domain_root else [str(target["host"])] ) + extra_hosts))
     scope_rows = []
     for host in hosts:
+        is_root = domain_root and host == domain_anchor
+        is_initial = host == str(target["host"])
         asset_type = "ip" if _is_ip(host) else "host"
+        inherited = domain_root and (is_root or is_initial)
+        profile = scope_entry_for_host(host, mode="explicit_domain" if is_root else (args.scope_mode if is_initial else "exact"), source="initial_target")
         scope_rows.append(
             {
                 "asset_id": hashlib.sha256(host.encode("utf-8")).hexdigest()[:16],
                 "asset": host,
                 "asset_type": asset_type,
-                "scope_state": "confirmation_required",
-                "source": "initial_target" if host == target["host"] else "operator_supplied",
-                "ownership_rationale": authorization_ref,
-                "permitted_actions": "none",
-                "confirmed_at": "",
-                "notes": "",
+                "scope_state": "in_scope" if inherited else "confirmation_required",
+                "source": "default_domain_anchor" if is_root else ("default_domain_input" if is_initial and domain_root else "operator_supplied"),
+                "ownership_rationale": authorization_ref if (is_root or is_initial) else "额外 host 默认按精确范围处理",
+                "permitted_actions": "read_only" if (domain_root and inherited) else "none",
+                "confirmed_at": created if (domain_root and inherited) else "",
+                "matched_scope_anchor": domain_anchor if domain_root else host,
+                "scope_match_kind": "domain_suffix" if domain_root else "exact_host",
+                "domain_authorized": "true" if domain_root and (is_root or is_initial) else "false",
+                "scope_mode": "default_domain" if domain_root and (is_root or is_initial) else "exact",
+                "notes": "单位主机默认继承根域；仍受 engagement active_testing 授权门约束" if inherited else "",
             }
         )
     write_csv_if_missing(root / "scope.csv", SCOPE_FIELDS, scope_rows)
@@ -431,6 +510,9 @@ def main() -> int:
             if phase == "application_mapping":
                 # 五子阶段种子（实施规格 5.2）：空串=未记录，审计在 phase 完成时强制落盘。
                 row["substatuses"] = {name: "" for name in APPLICATION_MAP_SUBPHASES}
+            if phase == "known_vuln_triage":
+                # 三子阶段种子（2026-09-07 P0 接线）：空串=未记录，审计在 phase 完成时强制落盘。
+                row["substatuses"] = {name: "" for name in KNOWN_VULN_TRIAGE_SUBPHASES}
             phases.append(row)
         phase_path.write_text(
             json.dumps({
@@ -496,7 +578,7 @@ def main() -> int:
         "## Confirmed findings\n\n"
         "## Rejected candidates and false positives\n\n"
         "## Blocked, approval-gated, and not-applicable areas\n\n"
-        "## Cleanup, retest, and residual risk\n\n"
+        "## Cleanup and residual risk\n\n"
         "## Evidence index\n\n",
     )
     write_text_if_missing(root / "reports" / ".gitkeep", "")

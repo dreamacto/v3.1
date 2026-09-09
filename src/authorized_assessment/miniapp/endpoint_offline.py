@@ -17,6 +17,8 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
+from src.authorized_assessment.scope import classify_host, normalize_scope_host, registrable_parent
+
 
 DEFAULT_SOURCE = Path(r"C:\Users\ASUS\AppData\Local\Temp\wxapp_unpack\__APP__")
 DEFAULT_OUT = Path(r"D:\PythonSource\PythonProjects\PythonProject4\runs\manual_wxapp_source_review_20260725")
@@ -155,7 +157,10 @@ def site_key(host: str) -> str:
 
 
 def same_site(a: str, b: str) -> bool:
-    return bool(a and b and site_key(a) == site_key(b))
+    """Return a strict parent/child host relation; never compare public suffixes."""
+    left = normalize_scope_host(a)
+    right = normalize_scope_host(b)
+    return bool(left and right and (left == right or left.endswith("." + right) or right.endswith("." + left)))
 
 
 def redact_url_values(url: str) -> str:
@@ -190,14 +195,29 @@ def load_scope_hosts(path: Path | None) -> set[str]:
     return hosts
 
 
+def _scope_entries(scope_hosts: set[str]) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for value in scope_hosts or set():
+        host = normalize_scope_host(value)
+        if not host:
+            continue
+        labels = host.split(".")
+        root_shape = len(labels) == 2 or (
+            len(labels) == 3 and ".".join(labels[-2:]) in {
+                "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "ac.cn", "mil.cn",
+                "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au",
+            }
+        )
+        anchor = registrable_parent(host) or host
+        entries.append({"host": anchor, "domain_authorized": True})
+    return entries
+
+
 def scope_state(host: str, scope_hosts: set[str]) -> str:
     if not host:
         return "relative_endpoint_manual_mapping_required"
-    if not scope_hosts:
-        return "ownership_confirmation_required"
-    if any(host == item or same_site(host, item) for item in scope_hosts):
-        return "in_current_scope"
-    return "ownership_confirmation_required"
+    result = classify_host(host, _scope_entries(scope_hosts))
+    return "in_current_scope" if result.scope_state == "in_scope" else "ownership_confirmation_required"
 
 
 def safe_candidate_url(url: str) -> bool:
@@ -349,6 +369,7 @@ def main() -> int:
     parser.add_argument("--api-candidates-out", type=Path, default=None)
     parser.add_argument("--in-scope-api-candidates-out", type=Path, default=None)
     parser.add_argument("--pending-assets-out", type=Path, default=None)
+    parser.add_argument("--hosts-csv", type=Path, default=None, help="Append discovered in-domain hosts to an authorized XCX hosts.csv")
     parser.add_argument("--append-api-candidates", action="store_true")
     args = parser.parse_args()
     root = args.source_dir

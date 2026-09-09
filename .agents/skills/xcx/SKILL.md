@@ -172,7 +172,7 @@ Maintain:
 
 Use phase statuses `pending`, `in_progress`, `complete`, `blocked`, or `not_applicable`. Use review
 statuses `candidate`, `needs_manual_validation`, `approval_required`, `confirmed`, `rejected`,
-`accepted_risk`, `fixed`, `retest_failed`, or `retest_passed`.
+`accepted_risk`, `fixed`, or historical `retest_failed`/`retest_passed` entries.
 
 When package material exists, do not mark static analysis complete after strings/URL extraction alone.
 Attempt unpacking/decompilation, enumerate all subpackages, reconstruct readable source as far as the
@@ -183,12 +183,23 @@ Keep `package_inventory`, `package_unpack_decompile`, and `source_reconstruction
 phases whenever package material exists. A failed extractor leaves the package branch blocked; it does
 not make the branch not applicable.
 
-## Authentication preflight from browser and Burp history
+## Explicit browser and Burp MCP protocol
 
-After the operator logs in and clicks through the mini-program in `browser-edge` or `browser-firefox`, inspect the most recent local requests through `burp-local` MCP. First list available tools, then choose the read-only HTTP-history query; do not assume a tool name. Match the mini-program's exact backend scheme/host/port against `hosts.csv`, `wechat_auth_domains.json`, Burp import artifacts, and the target model. Only a resolved in-scope host may supply authentication material. Platform-shared, third-party, unclassified, or confirmation-required hosts remain pending. Keep Cookie/Authorization/JWT values in memory or pass them to the existing local `auth_sessions.local.json` handling; never place raw history, request bodies, or credential values in conversation, reports, logs, ledgers, screenshots, or handoff prompts. Persist only non-sensitive `auth_preflight.json` status: `found`, `not_found`, `mcp_unavailable`, `host_mismatch`, or `pending`. This feeds the existing `wechat_auth_domains` → `manual_auth_queue` → `auth_sessions.local.json` → `gov_exercise_runner --auth-review` chain and does not replace scope classification or Burp XML/TXT offline import. Authentication-state review remains a heavyweight stop point.
+不得先索要 HAR/XML/TXT/cURL。
 
-Tool roles: `browser-edge`/`browser-firefox` handle operator login and page interaction; `burp-local` reads local HTTP history; `authenticated_session_review.py` performs bounded same-host read-only review.
+When the operator says that they already logged in, clicked the mini-program, or captured traffic, do
+not ask for HAR/XML/TXT/cURL first. Read the current scope, target model, and phase, then follow
+[the browser/Burp playbook](../../../docs/BROWSER_BURP_MCP_PLAYBOOK.md): run Burp `list`, query
+read-only HTTP history, and filter the exact scheme/host/port. Record `found`, `not_found`, `host_mismatch`,
+or `mcp_unavailable` as non-sensitive outcomes. `not_found` and `host_mismatch` are
+recorded states, not missing-package requests. Only after `list` is unavailable, Burp/extension/9876
+has been checked and retried once, may you request offline export material.
 
+If the phase needs the live page rather than existing history, `browser-firefox`/`browser-edge` are
+role labels, not tool names. The main agent must use `mcp__node_repl__js` with the Browser Use
+bootstrap, `agent.browsers.list()`, verified tab recovery, and `domSnapshot()` before an action. Do
+not invent a Firefox MCP tool, use shell/curl as a browser substitute, or delegate browser control to
+a subagent. Keep navigation limited to a user- or scope-verified URL and stop at approval gates.
 
 1. Use designated test accounts, devices, phone numbers, identities, tenants, and payment sandboxes.
 2. When the operator actively provides credentials/session tokens/cookies in the conversation, ACCEPT
@@ -218,9 +229,14 @@ Do not close until identity is resolved or explicitly limited, initial decoding 
 every supplied package and subpackage has an unpack/decompile result, recovered source is indexed, all
 materials have a result, every host is classified, every in-scope backend has full coverage, required
 phases are complete or justified not applicable, active candidates are disposed, confirmed findings have
-redacted evidence, safety controls and write-approval decisions are recorded, cleanup and retest are
-recorded, and `reports/final-report.md` exists.
+redacted evidence, safety controls and write-approval decisions are recorded, cleanup is complete, and
+reporting is complete when a reportable finding exists. If candidate validation produces no reportable
+finding, reporting is `not_applicable`; this does not mean the target is safe. There is no separate
+retest phase; later fix verification is an external/manual activity when applicable.
 
 The final response must identify the mini-program and platform, materials and hashes, tested versions
 and accounts, classified backends, client and backend coverage, findings, rejected candidates,
-unresolved gates, cleanup, retest, evidence, report paths, and residual risk.
+unresolved gates, cleanup, evidence, report paths, and residual risk.
+
+## Burp 抓包输入与认证态复核
+操作员已在 browser-edge/browser-firefox 登录并操作小程序，且已在本机 Burp 抓好包。XCX 可接收 HAR/XML/TXT/cURL 离线输入；先把包内 host 与 hosts.csv、scope、target-model 和精确 scheme/host/port 对账，第三方/平台/待确认 host 保持 pending。需要 Burp MCP 时先 `npx -y mcporter@0.9.0 list http://127.0.0.1:9876 --allow-http`，再选择只读 history 工具，用 `--http-url`、`key=value`、`--output json` 调用。MCP 只读本机历史，不等于目标发包授权；MCP 不可用或无匹配时保留人工队列。原始 history、Cookie、Authorization、JWT、请求体值不得进入对话或普通产物；认证、重放、云和写型动作仍走审批门。

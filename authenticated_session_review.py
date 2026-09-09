@@ -14,13 +14,12 @@ import csv
 import hashlib
 import json
 import re
-import ssl
 import time
 from datetime import datetime
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from api_discovery import SCRIPT_RE, classify_endpoint, extract_js_findings, normalize_url
 
@@ -41,6 +40,14 @@ SENSITIVE_FIELD_RE = re.compile(
     r"bank|account|name|username|realname|身份证|手机号|电话|邮箱|地址|姓名|账号)",
     re.I,
 )
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_NO_REDIRECT_OPENER = build_opener(_NoRedirectHandler())
 
 
 def now_iso() -> str:
@@ -69,6 +76,41 @@ def append_jsonl(path: Path, row: dict) -> None:
 
 def host_of(url: str) -> str:
     return (urlparse(url).hostname or "").lower()
+
+
+def origin_of(url: str) -> tuple[str, str, int] | None:
+    parsed = urlparse(str(url or "").strip())
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        return None
+    if parsed.username is not None or parsed.password is not None:
+        return None
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    if port is None:
+        port = 443 if parsed.scheme.lower() == "https" else 80
+    return parsed.scheme.lower(), parsed.hostname.lower(), port
+
+
+def approved_url(url: str, allowed_origins: set[tuple[str, str, int]]) -> bool:
+    origin = origin_of(url)
+    return origin is not None and origin in allowed_origins
+
+
+def allowed_origins(run_dir: Path) -> set[tuple[str, str, int]]:
+    origins: set[tuple[str, str, int]] = set()
+    targets_json = run_dir / "targets.json"
+    if targets_json.exists():
+        try:
+            parsed = json.loads(targets_json.read_text(encoding="utf-8", errors="ignore"))
+            for row in parsed.get("targets", []):
+                origin = origin_of(str(row.get("url") or ""))
+                if origin:
+                    origins.add(origin)
+        except (json.JSONDecodeError, AttributeError, OSError):
+            pass
+    return origins
 
 
 def build_manual_auth_handoff(run_dir: Path) -> dict:
@@ -262,23 +304,24 @@ def safe_headers(session: dict) -> dict[str, str]:
 def fetch_metadata(url: str, headers: dict[str, str], timeout: int, max_bytes: int = 131072) -> tuple[dict, str]:
     started = time.time()
     request = Request(url, headers=headers, method="GET")
-    context = ssl._create_unverified_context()
     status = 0
     final_url = url
     response_headers: dict[str, str] = {}
     body = b""
     error = ""
     try:
-        with urlopen(request, timeout=timeout, context=context) as response:
+        with _NO_REDIRECT_OPENER.open(request, timeout=timeout) as response:
             status = int(response.getcode() or 0)
             final_url = response.geturl()
             response_headers = {key.lower(): value for key, value in response.headers.items()}
-            body = response.read(max_bytes + 1)[:max_bytes]
+            if status in (200, 206):
+                body = response.read(max_bytes + 1)[:max_bytes]
     except HTTPError as exc:
         status = int(exc.code or 0)
         final_url = exc.geturl() or url
         response_headers = {key.lower(): value for key, value in exc.headers.items()}
-        body = exc.read(max_bytes + 1)[:max_bytes]
+        if status in (200, 206):
+            body = exc.read(max_bytes + 1)[:max_bytes]
     except (URLError, TimeoutError, OSError) as exc:
         error = str(exc)[:300]
     content_type = response_headers.get("content-type", "")
@@ -288,16 +331,10 @@ def fetch_metadata(url: str, headers: dict[str, str], timeout: int, max_bytes: i
         charset = match.group(1)
     text = body.decode(charset, errors="ignore")
     record = {
-        "checked_at": now_iso(),
-        "url": url,
-        "status": status,
-        "final_url": final_url,
-        "content_type": content_type,
-        "declared_content_length": response_headers.get("content-length", ""),
-        "sample_length": len(body),
-        "sample_sha256": hashlib.sha256(body).hexdigest() if body else "",
-        "elapsed_seconds": round(time.time() - started, 3),
-        "set_cookie_present": "set-cookie" in response_headers,
+        "checked_at": now_iso(), "url": url, "status": status, "final_url": final_url,
+        "content_type": content_type, "declared_content_length": response_headers.get("content-length", ""),
+        "sample_length": len(body), "sample_sha256": hashlib.sha256(body).hexdigest() if body else "",
+        "elapsed_seconds": round(time.time() - started, 3), "set_cookie_present": "set-cookie" in response_headers,
         "error": error,
     }
     return record, text
@@ -366,6 +403,7 @@ def run_authenticated_review_with_sessions(
     session_source: str = "operator_file",
 ) -> dict:
     scope_hosts = allowed_hosts(run_dir)
+    scope_origins = allowed_origins(run_dir)
     results_path = run_dir / "authenticated_api_results.jsonl"
     impact_path = run_dir / "authenticated_impact_candidates.jsonl"
     skips_path = run_dir / "authenticated_review_skips.jsonl"
@@ -387,7 +425,16 @@ def run_authenticated_review_with_sessions(
         base_url = str(session.get("base_url") or "").rstrip("/")
         entry_url = str(session.get("entry_url") or base_url).strip()
         host = host_of(base_url)
-        if not base_url or not host or host not in scope_hosts or host_of(entry_url) != host:
+        base_origin = origin_of(base_url)
+        entry_origin = origin_of(entry_url)
+        if (
+            not base_url
+            or not host
+            or base_origin is None
+            or base_origin not in scope_origins
+            or host not in scope_hosts
+            or entry_origin != base_origin
+        ):
             append_jsonl(skips_path, {"checked_at": now_iso(), "base_url": base_url, "reason": "outside_run_scope_or_host_mismatch"})
             continue
         headers = safe_headers(session)
@@ -404,7 +451,16 @@ def run_authenticated_review_with_sessions(
         record, text = fetch_metadata(entry_url, headers, timeout)
         total_requests += 1
         record.update({"base_url": base_url, "family": "authenticated_entry"})
-        record["session_appears_valid"] = session_appears_valid(record, text)
+        if not approved_url(str(record.get("final_url") or ""), scope_origins):
+            record["final_url_scope_violation"] = True
+            append_jsonl(results_path, record)
+            append_jsonl(skips_path, {
+                "checked_at": now_iso(), "base_url": base_url, "url": entry_url,
+                "reason": "redirected_outside_run_scope",
+            })
+            time.sleep(delay)
+            continue
+        record["session_appears_valid"] = session_appears_valid(record, text) if record["status"] in (200, 206) else False
         record.update(json_schema(text, record["content_type"]))
         append_jsonl(results_path, record)
         if not record["session_appears_valid"]:
@@ -416,7 +472,7 @@ def run_authenticated_review_with_sessions(
             continue
         for match in SCRIPT_RE.finditer(text):
             js_url = normalize_url(entry_url, match.group(1))
-            if js_url and host_of(js_url) == host:
+            if js_url and approved_url(js_url, scope_origins) and host_of(js_url) == host:
                 script_urls.add(js_url)
         time.sleep(delay)
 
@@ -425,13 +481,14 @@ def run_authenticated_review_with_sessions(
             total_requests += 1
             js_record.update({"base_url": base_url, "family": "authenticated_javascript"})
             append_jsonl(results_path, js_record)
-            if js_record["status"] in (200, 206) and js_text:
+            if js_record["status"] in (200, 206) and js_text and approved_url(str(js_record.get("final_url") or ""), scope_origins):
                 for absolute_url in ABSOLUTE_URL_RE.findall(js_text):
-                    discovered_host = host_of(absolute_url.rstrip("\"'();,}"))
-                    if discovered_host and discovered_host != host:
-                        pending_assets.add(absolute_url.rstrip("\"'();,}"))
+                    absolute_url = absolute_url.rstrip("\"'();,}")
+                    discovered_host = host_of(absolute_url)
+                    if discovered_host and (origin_of(absolute_url) not in scope_origins or discovered_host != host):
+                        pending_assets.add(absolute_url)
                 endpoints, source_maps, secrets = extract_js_findings(base_url, js_url, js_text)
-                endpoint_urls.update(url for url in endpoints if host_of(url) == host)
+                endpoint_urls.update(url for url in endpoints if approved_url(url, scope_origins) and host_of(url) == host)
                 for map_url in source_maps:
                     append_jsonl(impact_path, {
                         "checked_at": now_iso(), "base_url": base_url, "finding": "authenticated_source_map_reference",
@@ -449,7 +506,7 @@ def run_authenticated_review_with_sessions(
 
         for row in existing_candidates:
             url = str(row.get("url") or "")
-            if host_of(str(row.get("base_url") or url)) == host and host_of(url) == host:
+            if approved_url(str(row.get("base_url") or url), scope_origins) and approved_url(url, scope_origins) and host_of(str(row.get("base_url") or url)) == host:
                 endpoint_urls.add(url)
 
         fetched = 0
@@ -472,6 +529,12 @@ def run_authenticated_review_with_sessions(
             endpoint_record, endpoint_text = fetch_metadata(endpoint, headers, timeout)
             total_requests += 1
             fetched += 1
+            if not approved_url(str(endpoint_record.get("final_url") or ""), scope_origins):
+                endpoint_record["final_url_scope_violation"] = True
+                append_jsonl(results_path, {"checked_at": now_iso(), "base_url": base_url, "family": "authenticated_api", **endpoint_record})
+                append_jsonl(skips_path, {"checked_at": now_iso(), "base_url": base_url, "url": endpoint, "reason": "redirected_outside_run_scope"})
+                time.sleep(delay)
+                continue
             endpoint_record.update({"base_url": base_url, "family": "authenticated_api", **classify_endpoint(endpoint)})
             endpoint_record.update(json_schema(endpoint_text, endpoint_record["content_type"]))
             baseline = unauthenticated_baseline.get(endpoint.rstrip("/"))
@@ -534,16 +597,26 @@ def run_authenticated_review_with_sessions(
     return manifest
 
 
-def auth_preflight_allows_review(run_dir: Path) -> bool:
-    """Require a non-sensitive preflight marker for automatic session review."""
+def auth_preflight_reason(run_dir: Path) -> str | None:
     path = run_dir / "auth_preflight.json"
     if not path.is_file():
-        return True
+        return "auth_preflight_missing"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return False
-    return isinstance(payload, dict) and payload.get("status") == "found" and payload.get("raw_history_persisted") is False
+        return "auth_preflight_invalid"
+    if not isinstance(payload, dict):
+        return "auth_preflight_invalid"
+    if payload.get("status") != "found":
+        return "auth_preflight_not_found"
+    if payload.get("raw_history_persisted") is not False:
+        return "auth_preflight_invalid"
+    return None
+
+
+def auth_preflight_allows_review(run_dir: Path) -> bool:
+    """Require an explicit, non-sensitive successful preflight marker."""
+    return auth_preflight_reason(run_dir) is None
 
 def run_authenticated_review(
     run_dir: Path,
@@ -553,8 +626,9 @@ def run_authenticated_review(
     max_js: int,
     max_endpoints: int,
 ) -> dict:
-    if not auth_preflight_allows_review(run_dir):
-        return {"status": "pending", "reason": "auth_preflight_not_found_or_invalid", "credential_values_persisted": False}
+    reason = auth_preflight_reason(run_dir)
+    if reason:
+        return {"status": "pending", "reason": reason, "credential_values_persisted": False}
     sessions = load_sessions(cookie_file)
     return run_authenticated_review_with_sessions(
         run_dir=run_dir,

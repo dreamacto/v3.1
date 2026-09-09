@@ -83,7 +83,7 @@ DESKTOP_SCRIPTS = {
         "risk": "审批门：写端点需 write_risk_ack", "example": "一键竞态测试_授权目标.bat",
     },
     "AI配方_一键复制.bat": {
-        "scene": "菜单选 1-6 把 prompts/ 配方A-F 全文复制到剪贴板，粘贴给任意 AI 启动对应会话（copy_prompt.py）",
+        "scene": "菜单选 1-10 复制配方A-F/P/WZ/XCX/Z；P 为统一流程路由入口，WZ/XCX 为直接快捷入口（copy_prompt.py）",
         "risk": "离线复制，零网络请求", "example": "AI配方_一键复制.bat",
     },
 }

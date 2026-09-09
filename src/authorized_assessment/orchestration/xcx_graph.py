@@ -28,7 +28,7 @@ XCX_PHASES = (
     "input_file_testing", "business_logic_testing", "local_data_exposure",
     "crypto_and_secret_handling", "webview_bridge_links", "cloud_function_testing",
     "cloud_storage_acl_testing", "third_party_platform_boundary", "candidate_validation",
-    "evidence", "cleanup", "retest", "reporting",
+    "evidence", "cleanup", "reporting",
 )
 PHASES = XCX_PHASES
 

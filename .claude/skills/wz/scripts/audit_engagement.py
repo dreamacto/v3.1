@@ -36,6 +36,7 @@ CORE_PHASES = {
 }
 VALID_PHASE_STATUSES = {"pending", "in_progress", "complete", "blocked", "not_applicable"}
 OPEN_REVIEW_STATUSES = {"candidate", "needs_manual_validation"}
+REPORTABLE_REVIEW_STATUSES = {"confirmed", "accepted_risk", "fixed"}
 VALID_REVIEW_STATUSES = OPEN_REVIEW_STATUSES | {
     "approval_required",
     "confirmed",
@@ -85,6 +86,17 @@ APPLICATION_MAP_ARTIFACTS = {
     "auth_surface_mapping": "artifacts/application-map/auth-surface-inventory.csv",
     "webhook_mapping": "artifacts/application-map/webhook-inventory.csv",
 }
+
+# known_vuln_triage 审计（2026-09-07 P0 接线，方案 §3 W-1）。只在 phase 行存在时生效：
+# 该阶段只对新 seed 的 workspace 生效，旧 workspace 的 phase_status.json 没有该阶段行
+# 不是违例（兼容性硬要求——不得把既有 engagement 判成违例）。
+KNOWN_VULN_TRIAGE_PHASE = "known_vuln_triage"
+KNOWN_VULN_TRIAGE_SUBPHASES = (
+    "template_detect",
+    "product_screen",
+    "takeover_check",
+)
+KNOWN_VULN_TRIAGE_ARTIFACT = "artifacts/known-vuln/nuclei-detect.jsonl"
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -281,6 +293,58 @@ def application_mapping_issues(root: Path, phase_row: dict[str, Any] | None) -> 
     return issues
 
 
+def known_vuln_triage_issues(root: Path, phase_row: dict[str, Any] | None) -> list[str]:
+    """known_vuln_triage 审计：完成 = 三 substatus 非空落盘 + nuclei-detect.jsonl 存在；
+    not_applicable 须理由（phase_map 通用判据兜底）；phase 行不存在（旧 workspace）→ 不判违例。"""
+    if phase_row is None:
+        return []
+    issues: list[str] = []
+    status = str(phase_row.get("status", "")).strip()
+    substatuses = phase_row.get("substatuses")
+    if substatuses is not None and not isinstance(substatuses, dict):
+        issues.append(f"{KNOWN_VULN_TRIAGE_PHASE}: substatuses must be an object keyed by subphase")
+        substatuses = None
+    if isinstance(substatuses, dict):
+        for key, value in substatuses.items():
+            name = str(key).strip()
+            if name not in KNOWN_VULN_TRIAGE_SUBPHASES:
+                issues.append(f"{KNOWN_VULN_TRIAGE_PHASE}: unknown subphase {name!r}")
+                continue
+            value_text = str(value).strip()
+            if value_text and value_text not in COVERAGE_SUBSTATUSES:
+                issues.append(
+                    f"{KNOWN_VULN_TRIAGE_PHASE}.{name}: invalid substatus {value_text!r} "
+                    f"(allowed: {sorted(COVERAGE_SUBSTATUSES)})"
+                )
+    if status == "complete":
+        if not isinstance(substatuses, dict):
+            issues.append(
+                f"{KNOWN_VULN_TRIAGE_PHASE}: phase complete but substatuses are not recorded "
+                "(all three subphases must be on disk)"
+            )
+            substatuses = {}
+        for subphase in KNOWN_VULN_TRIAGE_SUBPHASES:
+            if not str((substatuses or {}).get(subphase, "") or "").strip():
+                issues.append(
+                    f"{KNOWN_VULN_TRIAGE_PHASE}: phase complete but subphase {subphase} "
+                    "has no recorded substatus"
+                )
+        if not (root / KNOWN_VULN_TRIAGE_ARTIFACT).is_file():
+            issues.append(
+                f"{KNOWN_VULN_TRIAGE_PHASE}: phase complete but {KNOWN_VULN_TRIAGE_ARTIFACT} is missing"
+            )
+    return issues
+
+
+def reportable_review_items(ledger: list[dict[str, str]]) -> list[str]:
+    """Return active review item IDs that require a final report."""
+    return [
+        row.get("item_id", "<missing>")
+        for row in ledger
+        if row.get("status") in REPORTABLE_REVIEW_STATUSES
+    ]
+
+
 def audit(root: Path) -> dict[str, Any]:
     root = Path(root).resolve()
     if root.name == "postrun_review" or (root / "target_review_queue.csv").is_file():
@@ -355,12 +419,27 @@ def audit(root: Path) -> dict[str, Any]:
         if isinstance(raw_substatuses, dict):
             app_map_substatuses = {str(key): str(value) for key, value in raw_substatuses.items()}
 
+    known_vuln_row = phases.get(KNOWN_VULN_TRIAGE_PHASE)
+    known_vuln_substatuses: dict[str, str] = {}
+    if known_vuln_row is not None:
+        issues.extend(known_vuln_triage_issues(root, known_vuln_row))
+        raw_kvt_substatuses = known_vuln_row.get("substatuses")
+        if isinstance(raw_kvt_substatuses, dict):
+            known_vuln_substatuses = {str(key): str(value) for key, value in raw_kvt_substatuses.items()}
+
     required = {name: row for name, row in phases.items() if bool(row.get("required", True))}
     blocked = [name for name, row in required.items() if row.get("status") == "blocked"]
     incomplete_core = [
         name for name in CORE_PHASES
         if name not in required or required[name].get("status") not in {"complete", "not_applicable"}
     ]
+    # known_vuln_triage（2026-09-07）：只对新 seed 的 workspace 生效——phase 行存在时才
+    # 计入核心完成度；旧 workspace 无该阶段不判违例（不入 CORE_PHASES 全集）。
+    if KNOWN_VULN_TRIAGE_PHASE in required and required[KNOWN_VULN_TRIAGE_PHASE].get("status") not in {
+        "complete",
+        "not_applicable",
+    }:
+        incomplete_core.append(KNOWN_VULN_TRIAGE_PHASE)
 
     ledger = [row for row in read_csv(root / "review_ledger.csv") if row.get("active", "true").lower() != "false"]
     endpoint_inventory = read_csv(root / "artifacts" / "endpoint-inventory.csv")
@@ -393,6 +472,9 @@ def audit(root: Path) -> dict[str, Any]:
     issues.extend(f"approval gate lacks exact requirement: {item}" for item in unreasoned_gates)
     issues.extend(f"rejected item lacks false-positive reason: {item}" for item in rejected_without_reason)
 
+    reportable_results = reportable_review_items(ledger)
+    reporting_required = bool(reportable_results)
+
     def done(name: str) -> bool:
         row = required.get(name)
         return bool(row and row.get("status") in {"complete", "not_applicable"})
@@ -409,7 +491,7 @@ def audit(root: Path) -> dict[str, Any]:
                            and report_files["meta_json"].stat().st_size > 0
                            and report_files["evidence_index"].is_file())
     report_exists = report_complete
-    if not report_complete:
+    if reporting_required and not report_complete:
         issues.append("final DOCX, findings.json, meta.json, and evidence/index.csv are required")
     if not auth_confirmed:
         state = "AUTHORIZATION_PENDING"
@@ -427,9 +509,7 @@ def audit(root: Path) -> dict[str, Any]:
         state = "EVIDENCE_PENDING"
     elif not done("cleanup"):
         state = "CLEANUP_PENDING"
-    elif not done("retest"):
-        state = "RETEST_PENDING"
-    elif not done("reporting") or not report_exists:
+    elif reporting_required and (not done("reporting") or not report_exists):
         state = "REPORT_PENDING"
     else:
         state = "CLOSED"
@@ -446,11 +526,15 @@ def audit(root: Path) -> dict[str, Any]:
         "invalid_scope_records": invalid_scope,
         "phase_counts": _counts([str(row.get("status", "")) for row in required.values()]),
         "application_mapping_substatuses": app_map_substatuses,
+        "known_vuln_triage_substatuses": known_vuln_substatuses,
         "blocked_phases": blocked,
         "incomplete_core_phases": incomplete_core,
         "review_counts": _counts([row.get("status", "") for row in ledger]),
         "open_review_items": open_review,
         "missing_evidence_items": missing_evidence,
+        "reportable_results": reportable_results,
+        "reporting_required": reporting_required,
+        "reporting_not_applicable": not reporting_required,
         "report_exists": report_exists,
         "issues": issues,
     }

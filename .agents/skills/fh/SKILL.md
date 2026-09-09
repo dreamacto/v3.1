@@ -505,3 +505,7 @@ Do not close until:
 - The final daily/report draft includes only manually verified findings and explicitly lists residual risk.
 
 The final response must summarize reviewed run directories, run health, top candidates, confirmed findings, rejected false positives, approval gates, new-scope blockers, evidence/report paths, and next actions.
+
+## 受限只读现场复核
+FH 可以对已完成授权 run 做最小现场补证：单目标、并发 1、同 host 间隔至少 3 秒、每目标最多 10 次只读 GET/HEAD；超预算需当前会话人工追加。不得借此重新扫描、枚举、弱口令、利用或写入。认证态补证前先确认浏览器登录和本机 Burp history 精确 scheme/host/port 匹配；MCP 不可用或无匹配时进入人工队列。
+

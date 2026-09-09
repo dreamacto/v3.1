@@ -35,11 +35,16 @@ offline analysis while waiting for a device, login, backend confirmation, or nar
 |---|---|---|
 | 1. Decrypt packages + lead extraction | `.venv/Scripts/python.exe decrypt_wxapkg.py --appid <appid> --dir <pkg-dir> --out <engagement>/artifacts/wxapkg_decrypted` | V1MMWX 解密；输出 decrypted 包 + 非微信系 URL/域名报告 |
 | 2. Restore full source | `.venv/Scripts/python.exe full_unpack_wxapkg.py <appid> <decrypted.wxapkg> <engagement>/artifacts/unpacked/<appid>` | 解析 wxapkg 结构还原源码文件 |
+| 2b. Backup unpack (2026-09-07, X-3) | `tools\managed\wxapkg\wxapkg_1.5.0_windows_amd64.exe -d <输入目录> -o <输出目录>`（GUI 版 `tools\managed\wxapkg\wxapkg-gui-windows-x64.exe` 供操作者手动兜底） | decrypt_wxapkg/full_unpack 失败时的备用还原器；结果仍走 source-map.csv 溯源 |
 | 3. Source sink scan | `.venv/Scripts/python.exe whitebox_triage.py --source-dir <engagement>/artifacts/unpacked/<appid> --out-dir <engagement>/artifacts/whitebox --scan` | 62 条 sink 模式扫描（sqli/ssrf/deserialize/authz_missing…） |
 | 4. Extracted-domain host classification | feeds `scope.csv` + `notes/target-model.md` | 每个提取 host 分类后才可测试；平台/支付/CDN/厂商面 confirmation_required |
 
 Do not hand-roll decryption or URL extraction when these tools exist; failures must be recorded in the
-phase note with the tool output path (negative space), not silently worked around.
+phase note with the tool output path (negative space), not silently worked around. A decrypt/unpack
+failure is first recorded as a row in `artifacts/decoding-ledger.csv`, then retried in the same phase
+with the backup unpacker (step 2b) before the phase may be marked `blocked` — same-engine reruns and
+backup-engine retries both stay in the ledger, and the backup's outputs go through the same
+`source-map.csv` traceability (an untraced extraction is not evidence).
 
 After intake, attempt local and offline decoding before dynamic testing. Use safe local tools to decode
 QR images, parse entry/share links, inspect AppID or equivalent identifiers, unpack or decrypt
@@ -162,6 +167,20 @@ windows, and device/user/tenant binding of signatures. Offline replay hypotheses
 screening only — write actions and concurrency validation remain approval-gated; never replay write
 requests automatically. Artifact: `signature-replay-review.json`.
 
+**L0 controlled replay executor (2026-09-07, X-2, P2)**: an offline-review replay hypothesis can be
+taken to a Tier C approval-gated L0 verification via
+`src/authorized_assessment/miniapp/signature_replay_l0.py` (plan+ingest; the module itself never
+executes anything and never sends a request). `plan` builds a pure-data runbook under hard
+constraints — read-only GET endpoints only (`endpoint_class=read_only_data`), ≤3 endpoints per host,
+replay the identical signed request once per time window (original capture vs T+5s vs T+60s),
+delay ≥3s, and `write_risk_ack` must be `false`: write/business endpoints are never replayed — a
+hard red line with no approval unlock (fail-closed). The operator replays manually inside the Tier C
+gate and refills the three-window observations (status + structure fingerprint, never values);
+`ingest` derives deterministic rows into `artifacts/miniapp/auth/signature-replay-l0.jsonl`
+(contract `miniapp_auth_schema.l0_executor`): acceptance in both windows becomes `candidate` for the
+`replay_window` branch (manual review; the five finding gates are unchanged), single-window
+acceptance or rejection stays `signal`, and `confirmed` is never produced here.
+
 ### API and access control
 
 Build an endpoint-role-object matrix. Test anonymous/authenticated behavior, object ownership,
@@ -173,6 +192,20 @@ Use two or more designated accounts only when authorized. Change one identifier 
 time and use synthetic records. Do not access or retain another real user's data. Any create, update,
 delete, upload, export, order, payment, refund, session, account, password, or notification action
 requires operator approval before execution.
+
+**Backend component nday screening (2026-09-07, X-1)**: `backend_web_api_testing` seeds its first
+coverage substatus `component_nday_screening` in `phase_status.miniapp.json`. For hosts classified as
+in-scope own backends in `hosts.csv`, reuse the WZ detection engines under their own rules: the Nuclei
+Tier A detect-only whitelist (`wordlists/nuclei_detect_include.ids`, ROE Tier A profile) plus the
+triggered `*_triage.py` read-only screens when a fingerprint names a product (springboot_triage.py
+actuator/druid/swagger detection profile included). Scan output lands in
+`artifacts/backend-component/nday-screen.jsonl`; every hit enters `review_ledger.csv` with
+`source=backend_component_screening` after the usual truth-verify negative controls (uniform error
+page, soft-404, WAF block comparison). Cursor isolation is unchanged: the miniapp stream only ever
+writes `phase_status.miniapp.json` and never touches the WZ `phase_status.json`. A `tested` substatus
+requires the `nday-screen.jsonl` artifact on disk; `not_applicable` needs a reason (for example: no
+in-scope own-backend host); a zero-hit scan still records template count and list hash — coverage
+evidence, not "backend is safe".
 
 ### Business logic
 
@@ -200,10 +233,17 @@ files. Artifact: `artifacts/miniapp/storage/local-data-review.json`.
 Cryptography and secret handling. Branches: `hardcoded_secrets`, `custom_crypto`,
 `weak_random_key_derivation`, `debug_config_env_keys` (environment keys/debug config as secret
 material; debug switches themselves stay in `package_integrity_update_review` to avoid double
-counting). Review AppSecret/fixed-token/key hardcoding, custom crypto, weak randomness and key
+counting), and `passive_leak_dork` (2026-09-07, X-4). Review AppSecret/fixed-token/key hardcoding, custom crypto, weak randomness and key
 derivation, and environment keys in package config. A secret string without proven validity is only a
 `secret_candidate` clue (recorded as `signal` in the eight-state model), never a key-leak finding.
 Artifact: `artifacts/miniapp/crypto/secret-review.json`.
+
+`passive_leak_dork` is the zero-target-contact passive leak surface: GitHub code search and
+search-engine dorks over the AppID (`wx36c37188e21c74b9` shape), company name, and backend domains
+(`gh api search/code` or manual). Red lines: never contact the target; a hit only produces a
+`secret_candidate` clue — recorded as `signal`, the branch never upgrades by itself and
+SECRET_CANDIDATE_RED_LINE is unchanged; record only the hit URL plus a short snippet summary, never
+download third-party repository content into evidence.
 
 ### Client and bridge boundaries
 
@@ -276,8 +316,10 @@ approval need, and cleanup before higher-impact validation. Confirm only repeata
 Reject platform noise, third-party behavior, mock data, stale package paths, unreachable code, public
 identifiers, securely encoded reflection, uniform gateway errors, and differences without impact.
 
-Collect redacted evidence, remove test artifacts, revoke sessions, verify transaction/object cleanup,
-retest fixes, and produce separate client, backend, platform, and third-party report sections.
+Collect redacted evidence, remove test artifacts, revoke sessions, verify transaction/object cleanup, and
+produce separate client, backend, platform, and third-party report sections. If candidate validation
+produces no reportable finding, mark reporting `not_applicable` after cleanup. The workflow has no
+separate retest phase; later fix verification is external/manual when applicable.
 
 ## 7. Resume logic
 

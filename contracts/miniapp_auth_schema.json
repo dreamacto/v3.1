@@ -37,6 +37,40 @@
       ]
     }
   },
+  "l0_executor": {
+    "module": "src/authorized_assessment/miniapp/signature_replay_l0.py",
+    "description": "signature_replay L0 受控重放执行器（WZ/XCX 能力升级 P2 ⑧，方案 §4 X-2，2026-09-07）。plan+ingest 两段式能力模块：plan 纯数据零执行（runbook 交操作者），ingest 解析操作者手工回填的三窗口观测，产出判定行至 artifacts/miniapp/auth/signature-replay-l0.jsonl。confirmed 永不由 L0 产生；行只进 signal/candidate/inconclusive，candidate 仍走 review_ledger 与 finding 五门。与 signature_replay 离线评审（signature_replay_review.py）双轨并存：离线评审做重放假设，L0 在 Tier C 审批门内做受控验证。",
+    "mode": "plan_and_ingest",
+    "executor": "operator_manual",
+    "approval_gate": "tier_c_single_candidate",
+    "artifact": "artifacts/miniapp/auth/signature-replay-l0.jsonl",
+    "constraints": {
+      "allowed_methods": ["GET"],
+      "endpoint_classes": ["read_only_data", "business_action", "write"],
+      "allowed_endpoint_class": "read_only_data",
+      "max_endpoints_per_host": 3,
+      "min_delay_seconds": 3.0,
+      "time_window_offsets_seconds": [5, 60],
+      "replays_per_window": 1,
+      "write_risk_ack_must_be": false
+    },
+    "replay_outcomes": [
+      "accepted_both_windows",
+      "accepted_t5_only",
+      "accepted_t60_only",
+      "rejected_both_windows",
+      "inconclusive"
+    ],
+    "row_statuses": ["signal", "candidate", "inconclusive"],
+    "row_branch": "replay_window",
+    "red_lines": [
+      "写型/业务型端点永不重放；write_risk_ack 必须为 false，设 true 即拒绝（fail-closed），与 race_triage 的 write_risk_ack==true 人工批准语义相反——本 L0 无审批解锁路径",
+      "单请求重放 1 次：每个时间窗（T+5s/T+60s）对同一请求只重放 1 次，无并发；每窗口观测只允许 1 行",
+      "本模块零执行零网络：重放动作全部由操作者手工执行（Tier C 审批门内），plan 只是纯数据 runbook",
+      "只读 GET 型端点、每 host ≤3 端点、连续动作 delay≥3s",
+      "confirmed 永不由 L0 ingest 产生；candidate 只能来自 accepted_both_windows 且必须携带 evidence_ref"
+    ]
+  },
   "coverage_substatus": {
     "contract_ref": "coverage_substatus_schema",
     "status_values": ["tested", "not_applicable", "blocked", "approval_required", "needs_manual_validation", "inconclusive"],

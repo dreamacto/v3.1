@@ -55,6 +55,15 @@ Banner/版本/框架名、robots/sitemap/OpenAPI 文档存在、目录文件名�
 入口/资产 → 攻击者可控输入或低权限身份 → 服务端缺陷/边界缺失 → 可复现结果 → 对企业的具体影响 → 最小必要证据
 ```
 
+
+## 双流状态与 Burp 前置（当前规则）
+
+- WZ 只读取和写入 `phase_status.json`；XCX 只读取和写入 `phase_status.miniapp.json`；不得用一个游标代替另一个。
+- WZ/XCX 认证态检查前，操作员必须已经在 browser-edge/browser-firefox 登录并操作目标，且已在本机 Burp 抓好包。
+- 如需查看 Burp 历史，先执行 `npx -y mcporter@0.9.0 list http://127.0.0.1:9876 --allow-http`，再选择只读 HTTP history 工具；调用使用 `--http-url`、`key=value`、`--output json`。只匹配精确 scheme/host/port。
+- Burp MCP 只读取本机历史，不等于目标发包授权；目标网络请求仍受 ROE、scope、低速、GET/HEAD、预算和停止条件约束。MCP 不可用或无匹配历史时进入人工队列。
+- 原始 history、Cookie、Authorization、JWT、请求体值不进入对话、报告、日志、ledger、截图或交接提示词。
+
 ## 与日常模式的边界
 
 - 日常仍按配方分岗（一会话一岗位 / wz 询问式交接）。

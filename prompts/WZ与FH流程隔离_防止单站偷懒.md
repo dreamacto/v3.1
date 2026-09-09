@@ -581,3 +581,11 @@ current_coverage
 ```
 
 单站流程必须自己重新建立事实、自己推进阶段、自己写游标、自己写阶段记录、自己留下未测原因。历史复核结果不能成为偷懒依据。
+
+### FH 受限只读现场复核边界
+
+FH 可以在已完成授权 run 的复核阶段进行极小范围现场补证，但仅限单目标、并发 1、同一 host 请求间隔至少 3 秒、每目标最多 10 次只读 GET/HEAD；超预算必须当前会话人工追加。它不是重新扫描、主动利用、弱口令、枚举或写操作。认证态补证前，先确认浏览器登录和 Burp 抓包，并通过本机 Burp MCP 只读 history 精确匹配 scheme/host/port；MCP 不可用或无匹配时停在人工队列。
+
+### WZ/ XCX 抓包输入边界
+
+WZ 和 XCX 均可接收操作员已在 Burp 抓好的包，以及导出的 HAR/XML/TXT/cURL。先离线解析、host 归属和 scope 对账，再决定是否进行受控只读请求。Burp MCP 只读取 `127.0.0.1:9876` 本机历史；先 `npx -y mcporter@0.9.0 list http://127.0.0.1:9876 --allow-http`，再选只读 history 工具并用 `--http-url`、`key=value`、`--output json` 调用。原始 history、Cookie、Authorization、JWT、请求体值不得进入对话、普通日志、ledger、报告或 handoff。

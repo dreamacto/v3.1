@@ -13,7 +13,10 @@
 | hypothesis_ledger.jsonl | 配方E 沉淀时把 run 工作区 hypothesis_plan.jsonl 中**已获人工批准**的条目追加为 proposed；status 回填永远由人执行（配方B 只落 run 工作区，不直写本库） | 配方B（避免重复提出）；metrics_weekly.py（命中率指标） | 每轮规划 / 每次执行后 / 每周沉淀 |
 | sink_lib.jsonl (W13) | 人工维护（模式库，低频更新） | whitebox_triage.py（扫描种子） | 每次白盒扫描 |
 
-## schema（字段定死，勿改字段名）
+## 周度双事实源沉淀
+
+配方 E 同时读取 `runs/` 与 `engagements/`；当前以 `engagements/` 为主要工作源，`runs/` 保留一键流程的历史指标口径。engagement 摘要只允许写入阶段状态、台账状态/稳定 ID、覆盖/负面空间分类、脱敏证据索引和可复用指纹/误报模式；不得复制原始请求响应、凭证、个人数据或 `restricted_local_only` 内容。`engagements/evidence/` 顶层共享目录不自动视为 engagement。
+
 
 - fp_memory: `{"ts","host","fp_pattern","verdict_basis"}` —— 与 fh_review_dispatch.py --aggregate 输出完全一致
 - vuln_pattern_lib: `{"id","category","business_scene","hypothesis_template","test_recipe","proven_count","last_used"}`

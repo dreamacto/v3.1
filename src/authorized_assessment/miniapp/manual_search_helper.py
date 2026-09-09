@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qsl, quote_plus, urlencode, urlparse, urlunparse
+from src.authorized_assessment.scope import classify_host, normalize_scope_host, registrable_parent
 from xml.etree import ElementTree
 
 
@@ -99,7 +100,10 @@ def site_key(host: str) -> str:
 
 
 def same_site(a: str, b: str) -> bool:
-    return bool(a and b and site_key(a) == site_key(b))
+    """Return a strict parent/child host relation; not an authorization decision."""
+    left = normalize_scope_host(a)
+    right = normalize_scope_host(b)
+    return bool(left and right and (left == right or left.endswith("." + right) or right.endswith("." + left)))
 
 
 def redacted_url(url: str) -> str:
@@ -330,7 +334,22 @@ def candidate_from_burp(row: dict, targets: list[TargetSeed]) -> dict:
     url = redacted_url(raw_url)
     host = host_of(raw_url)
     score, reasons = score_url(method, raw_url)
-    in_scope = any(host == target.host or same_site(host, target.host) for target in targets)
+    scope_entries = []
+    for target in targets:
+        target_host = normalize_scope_host(target.host)
+        if not target_host:
+            continue
+        labels = target_host.split(".")
+        root_shape = len(labels) == 2 or (
+            len(labels) == 3 and ".".join(labels[-2:]) in {
+                "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "ac.cn", "mil.cn",
+                "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au",
+            }
+        )
+        anchor = registrable_parent(target_host) or target_host
+        scope_entries.append({"host": anchor, "domain_authorized": True})
+    scope_match = classify_host(host, scope_entries)
+    in_scope = scope_match.scope_state == "in_scope"
     return {
         "checked_at": now_iso(),
         "base_url": f"{urlparse(raw_url).scheme}://{urlparse(raw_url).netloc}",
@@ -340,6 +359,8 @@ def candidate_from_burp(row: dict, targets: list[TargetSeed]) -> dict:
         "method": method,
         "host": host,
         "scope_state": "in_current_scope" if in_scope else "ownership_confirmation_required",
+        "scope_match_kind": scope_match.match_kind,
+        "matched_scope_anchor": scope_match.matched_anchor,
         "source": "burp_miniapp_import",
         "source_file": row.get("source"),
         "source_kind": row.get("source_kind"),

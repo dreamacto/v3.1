@@ -79,10 +79,10 @@ class AttackResultDocxTests(unittest.TestCase):
             out = make_attack_result_docx(run_dir, config)
             generated = Document(out)
             text = "\n".join(p.text for p in generated.paragraphs)
-            self.assertEqual(text.count("成果1：未授权访问"), 1)
             table_text = "\n".join(c.text for t in generated.tables for r in t.rows for c in r.cells)
-            self.assertIn("https://example.test/api/a；https://example.test/api/b", table_text)
-            self.assertIn("涉及数据量", table_text)
+            self.assertIn("未授权访问", text)
+            self.assertIn("https://example.test/api/a\nhttps://example.test/api/b", table_text)
+            self.assertIn("影响范围", table_text)
 
     def test_data_row_is_omitted_when_no_data_or_scope_exists(self):
         with tempfile.TemporaryDirectory() as tmp:

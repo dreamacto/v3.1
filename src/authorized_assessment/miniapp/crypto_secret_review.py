@@ -8,14 +8,19 @@ Batch 11）。
 内容；不做密钥有效性的主动验证——有效性确认只来自既有只读证据（包源码/清单/
 本地流量）的复核（红线常量留痕）。
 
-四分支（与 contracts/miniapp_storage_package_schema.json phases.crypto_and_secret_
-handling.branches 同源；规格 6.6 检查项四至六项逐一对应 + batch11_0 去重分配）：
+五分支（与 contracts/miniapp_storage_package_schema.json phases.crypto_and_secret_
+handling.branches 同源；规格 6.6 检查项四至六项逐一对应 + batch11_0 去重分配；
+passive_leak_dork 为 2026-09-07 P1 X-4 增补）：
 - hardcoded_secrets：AppSecret、固定 token、密钥硬编码；
 - custom_crypto：自定义加密；
 - weak_random_key_derivation：弱随机数、密钥派生；
 - debug_config_env_keys：包中调试配置和环境密钥（只覆盖密钥材料暴露面；调试
   开关本身归 package_integrity_update_review.debug_switches，契约 invariant 留痕，
-  避免重复计数）。
+  避免重复计数）；
+- passive_leak_dork：GitHub code search / 搜索引擎被动泄露面 dork（AppID/公司名/
+  后端域名）——零目标接触：不接触目标、不下载第三方仓库正文到证据（只记 URL +
+  命中片段摘要），命中只产 secret_candidate 线索；该分支无升级规则（永不自动
+  升级，手工 status_hint 越级仍被 validate 的 never_upgrade 拒绝）。
 
 secret_candidate 红线（规格 1633 行）："发现密钥字符串但无法证明有效性时只能是
 secret_candidate，不能直接称为密钥泄露漏洞"。落地方式：secret_candidate 是未证实
@@ -30,15 +35,18 @@ from typing import Iterable, Mapping
 
 from authorized_assessment.miniapp import package_integrity_update as sp_engine
 
-# 四分支（契约 phases.crypto_and_secret_handling.branches 同源）。
+# 五分支（契约 phases.crypto_and_secret_handling.branches 同源；passive_leak_dork
+# 为 X-4 增补的零目标接触被动泄露面，无升级规则 → 永不自动升级）。
 CRYPTO_SECRET_BRANCHES: tuple[str, ...] = (
     "hardcoded_secrets",
     "custom_crypto",
     "weak_random_key_derivation",
     "debug_config_env_keys",
+    "passive_leak_dork",
 )
 
-# 证据形态（12：8 形态/支持性永不升级 + 4 确认形态与分支一一对应）。
+# 证据形态（14：10 形态/支持性永不升级 + 4 确认形态与四分支一一对应；
+# passive_leak_dork 只有两个形态键，永不升级）。
 CRYPTO_SECRET_EVIDENCE_KINDS: tuple[str, ...] = (
     "secret_like_string_observed",
     "secret_reference_marker_observed",
@@ -48,6 +56,8 @@ CRYPTO_SECRET_EVIDENCE_KINDS: tuple[str, ...] = (
     "key_derivation_marker_observed",
     "env_key_in_config_observed",
     "debug_config_key_clue_observed",
+    "public_leak_dork_hit_observed",
+    "public_leak_documentation_link_observed",
     "secret_reachable_confirmed",
     "custom_crypto_bypassable_confirmed",
     "predictable_random_confirmed",
@@ -65,12 +75,16 @@ CRYPTO_SECRET_INSUFFICIENT_KINDS: tuple[str, ...] = (
     "key_derivation_marker_observed",
     "env_key_in_config_observed",
     "debug_config_key_clue_observed",
+    "public_leak_dork_hit_observed",
+    "public_leak_documentation_link_observed",
 )
 
 # 升级规则（实现定义，固定语义；确认形态与分支一一对应、不跨分支升级）：
 # "确认"语义要求观察来自既有只读证据（包源码/清单/本地流量）的复核判定且可
 # 复现；不主动验证密钥有效性、不发送请求、不复制密钥原文（precondition 必须
-# 留痕）。
+# 留痕）。passive_leak_dork 有意无条目（X-4 红线：命中只产 secret_candidate
+# 线索，永不自动升级；grade 对无规则分支返回 signal，validate 对该分支的
+# candidate/confirmed 越级行报"永不升级"违例）。
 CRYPTO_SECRET_UPGRADE_RULES: dict[str, dict[str, tuple[tuple[str, ...], ...]]] = {
     "hardcoded_secrets": {
         "required_any_groups": (("secret_reachable_confirmed",),)
@@ -110,6 +124,11 @@ CRYPTO_SECRET_OBSERVATION_FIELD_DOCS: dict[str, str] = {
     "强度（既有只读证据复核且可复现）",
     "env_key_accepted_confirmed": "已确认环境密钥真实有效且被客户端用于敏感决策"
     "（既有只读证据复核且可复现；不主动验证）",
+    "public_leak_dork_hit_observed": "GitHub code search / 搜索引擎 dork 命中"
+    "（AppID/公司名/后端域名关联的第三方公开泄露线索；零目标接触，仅记 URL + "
+    "命中片段摘要，不下载第三方仓库正文）",
+    "public_leak_documentation_link_observed": "dork 命中泄露的接口文档/内部平台"
+    "链接线索（零目标接触，仅线索）",
 }
 
 # 红线常量（规格 6.6 1633 行原文 + 凭证纪律；写入 artifact 与候选 precondition）。

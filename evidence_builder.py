@@ -12,7 +12,6 @@ from pathlib import Path
 from exercise_runtime import now_iso, write_json
 from artifact_manifest import create_manifest
 from screenshot_queue_builder import build_screenshot_queue
-from report_model import aggregate_report_findings, normalize_report_finding, optional_scope_rows
 
 from project_paths import config_path
 
@@ -201,137 +200,6 @@ def load_confirmed_or_verified_findings(run_dir: Path) -> tuple[list[dict], str]
     return [], "none"
 
 
-def normalize_finding(row: dict, index: int) -> dict:
-    base_url = safe_text(row.get("base_url"))
-    path = safe_text(row.get("path"))
-    url = safe_text(row.get("url") or row.get("target_url") or row.get("endpoint"))
-    if not url and base_url:
-        url = base_url.rstrip("/") + (path if path.startswith("/") else f"/{path}" if path else "")
-    vuln_type = safe_text(
-        row.get("vuln_type")
-        or row.get("type")
-        or row.get("kind")
-        or row.get("finding")
-        or row.get("risk_type"),
-        "待确认漏洞类型",
-    )
-    reasons = row.get("verification_reasons") or row.get("reasons") or row.get("evidence_reasons") or []
-    if isinstance(reasons, list):
-        reasons_text = "；".join(safe_text(item) for item in reasons if safe_text(item))
-    else:
-        reasons_text = safe_text(reasons)
-    description = safe_text(
-        row.get("description")
-        or row.get("title")
-        or row.get("summary")
-        or f"{vuln_type}：{url}",
-        f"成果 {index}",
-    )
-    exploitability = safe_text(
-        row.get("exploitability")
-        or row.get("impact")
-        or row.get("impact_summary")
-        or reasons_text,
-        "已发现可验证风险点，需结合截图、响应差异、权限边界和业务影响补充最终可利用性说明。",
-    )
-    limitations = safe_text(
-        row.get("limitations")
-        or row.get("limit_conditions")
-        or row.get("constraints"),
-        "限制条件待补充：需说明账号权限、访问来源、是否依赖登录态、是否只读验证、是否存在 WAF/限速/时间窗口限制。",
-    )
-    fix = safe_text(
-        row.get("fix")
-        or row.get("remediation")
-        or row.get("suggestion")
-        or row.get("recommendation"),
-        "修复建议待补充：按漏洞类型补充鉴权、输入校验、最小权限、敏感文件访问控制、日志审计和配置加固。",
-    )
-    return {
-        "index": index,
-        "description": description,
-        "system": safe_text(row.get("system") or row.get("target_name") or row.get("app_name"), "待补充目标系统"),
-        "url": url or "待补充 URL",
-        "ip": safe_text(row.get("ip") or row.get("target_ip"), "待补充"),
-        "network": safe_text(row.get("network") or row.get("network_area"), "外网"),
-        "vuln_type": vuln_type,
-        "score": safe_text(row.get("score") or row.get("verification_score") or row.get("expected_score"), "待评估"),
-        "process": safe_text(row.get("process") or row.get("attack_process") or row.get("proof"), description),
-        "exploitability": exploitability,
-        "limitations": limitations,
-        "fix": fix,
-        "screenshot_desc": safe_text(
-            row.get("screenshot_desc") or row.get("screenshot_needed"),
-            f"{url or description} 的漏洞证明、时间、登录态/权限边界和关键响应差异",
-        ),
-    }
-
-
-def screenshot_files_for_finding(run_dir: Path, finding: dict, all_images: list[Path], total_findings: int) -> list[Path]:
-    if not all_images:
-        return []
-    needle_parts = [
-        safe_text(finding.get("url")).lower(),
-        safe_text(finding.get("system")).lower(),
-        safe_text(finding.get("vuln_type")).lower(),
-    ]
-    host_tokens = []
-    for part in needle_parts:
-        host_tokens.extend(re.findall(r"[a-z0-9][a-z0-9.-]+\.[a-z]{2,}", part))
-    matches = []
-    for image in all_images:
-        name = image.name.lower()
-        if any(token and token in name for token in host_tokens):
-            matches.append(image)
-    if matches:
-        return matches[:3]
-    if total_findings == 1:
-        return all_images[:5]
-    return []
-
-
-def add_paragraph(doc, text: str = "", *, style: str | None = None, bold: bool = False, color: str | None = None):
-    try:
-        paragraph = doc.add_paragraph(style=style) if style else doc.add_paragraph()
-    except KeyError:
-        paragraph = doc.add_paragraph()
-    run = paragraph.add_run(text)
-    run.bold = bold
-    if color:
-        from docx.shared import RGBColor
-
-        run.font.color.rgb = RGBColor.from_string(color)
-    return paragraph
-
-
-def set_cell(cell, text: str, *, bold: bool = False) -> None:
-    cell.text = ""
-    paragraph = cell.paragraphs[0]
-    run = paragraph.add_run(safe_text(text))
-    run.bold = bold
-
-
-def add_kv_table(doc, rows: list[tuple[str, str]]) -> None:
-    table = doc.add_table(rows=len(rows), cols=2)
-    try:
-        table.style = "Table Grid"
-    except KeyError:
-        pass
-    for idx, (key, value) in enumerate(rows):
-        set_cell(table.rows[idx].cells[0], key, bold=True)
-        set_cell(table.rows[idx].cells[1], value)
-
-
-def clear_template_body(doc) -> None:
-    from docx.oxml.ns import qn
-
-    body = doc._body._element
-    for element in list(body):
-        if element.tag == qn("w:sectPr"):
-            continue
-        body.remove(element)
-
-
 def load_report_config(path: Path) -> dict:
     """Load report-only configuration; legacy wrapper is accepted at this boundary."""
     cfg = read_json(path)
@@ -363,7 +231,7 @@ def make_attack_result_docx(run_dir: Path, config_path: Path, *, force: bool = F
     policy = reporting.get("policy", {}) if isinstance(reporting.get("policy"), dict) else {}
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out = run_dir / "reports" / f"攻击成果_{stamp}.docx"
-    meta = {"env_lines": [], "problems": [], "suggestions": []}
+    meta = {}
     build_report(meta, raw_findings, out, policy, template_path)
     return out
 

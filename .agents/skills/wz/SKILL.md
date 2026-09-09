@@ -61,7 +61,7 @@ This skill is one stage of a larger engagement. Treat each session as advancing 
 
 Take one authorized website from a supplied target to a defensible final report. Treat automation as
 coverage support, not as the conclusion. Keep candidate discovery, validation, evidence, cleanup,
-and retest connected in one resumable engagement workspace.
+and cleanup connected in one resumable engagement workspace.
 
 ## Load the right references
 
@@ -80,9 +80,7 @@ and retest connected in one resumable engagement workspace.
    is supplied, record the basis as `user_supplied_initial_target`.
 2. Record any supplied testing window, exclusions, source IP requirements, rate limits, account rules,
    data-handling rules, and emergency contact without blocking on facts the user did not require.
-3. Do not assume that sibling domains,
-   discovered subdomains, vendors, CDNs, identity providers, payment providers, or cloud tenants are
-   included.
+3. Do not assume that sibling domains, vendors, CDNs, identity providers, payment providers, or cloud tenants are included. By default, any legitimate host supplied as an authorized unit asset (for example `www.example.com`) derives the registrable parent (`example.com`) and may include that parent plus its legitimate subdomains. This is `default_domain` scope inheritance, not sibling-domain expansion, and it does not grant active-testing or high-risk approval. If the operator explicitly says to test only a host/subdomain, or supplies an exact scope profile/`--scope-mode exact`, exact narrowing wins. Similar suffixes (`evilabc.com`, `example.com.evil.com`) and third-party/platform hosts remain pending or out of scope.
 4. Stop active requests when a discovered target is outside the supplied scope, the stated window is
    closed, service health degrades,
    or the next step would exceed the rules of engagement.
@@ -131,6 +129,8 @@ Do exactly four things, then ask:
    `pending` or `in_progress` next in order, or the phase the operator named.
 2. Advance that single phase only. Use `references/workflow.md` as the phase dictionary to see what this
    phase covers; do not start any later phase.
+   Run `known_vuln_triage` between application_mapping and unauthenticated_testing; see workflow.md
+   "Known-vulnerability screening" (2026-09-07).
 3. Update `phase_status.json` with this phase's result, plus the phase note and `notes/target-model.md`
    (handoff-complete, per constraint 2).
 4. Tell the operator which phase is next, and ASK: continue in this session, or hand off? If handoff,
@@ -170,12 +170,23 @@ Give every `not_applicable` or `blocked` phase a specific reason. Use these revi
 Never delete an old row to make the engagement look complete. Mark stale rows inactive and retain
 their history or source reference.
 
-## Authentication preflight
+## Explicit browser and Burp MCP protocol
 
-Before entering `authenticated_session_review` or another authentication-state phase, check whether the operator has just logged in and clicked through the target in `browser-edge` or `browser-firefox`. Prefer the local `burp-local` MCP to list available tools and use its read-only HTTP-history capability. Filter by the engagement's exact scheme/host/port and select only recent relevant requests. Never put raw history, cookies, Authorization values, JWTs, or request bodies into conversation, run artifacts, logs, reports, ledgers, screenshots, or handoff prompts. Pass matched credentials only in memory to the existing local session handling, or write them to the git-excluded `auth_sessions.local.json`. Record only non-sensitive status in `auth_preflight.json`: `found`, `not_found`, `mcp_unavailable`, `host_mismatch`, or `pending`. An unavailable MCP or unmatched history leaves an operator queue; it never implies authenticated or unauthenticated status. Authentication-state review remains same-host, GET-only, metadata-limited, and is a heavyweight stop point.
+不得先索要 HAR/XML/TXT/cURL。
 
-Tool roles: `browser-edge`/`browser-firefox` are for operator login and page interaction; `burp-local` is for local HTTP-history inspection; `authenticated_session_review.py` performs bounded same-host read-only review.
+When the operator says that they already logged in, clicked the target, or captured traffic, do not
+ask for HAR/XML/TXT/cURL first. Read the current scope, target model, and phase, then follow
+[the browser/Burp playbook](../../../docs/BROWSER_BURP_MCP_PLAYBOOK.md): run Burp `list`, query
+read-only HTTP history, and filter the exact scheme/host/port. Record `found`, `not_found`, `host_mismatch`,
+or `mcp_unavailable` as non-sensitive outcomes. `not_found` and `host_mismatch` are
+recorded states, not missing-package requests. Only after `list` is unavailable, Burp/extension/9876
+has been checked and retried once, may you request offline export material.
 
+If the phase needs the live page rather than existing history, `browser-firefox`/`browser-edge` are
+role labels, not tool names. The main agent must use `mcp__node_repl__js` with the Browser Use
+bootstrap, `agent.browsers.list()`, verified tab recovery, and `domSnapshot()` before an action. Do
+not invent a Firefox MCP tool, use shell/curl as a browser substitute, or delegate browser control to
+a subagent. Keep navigation limited to a user- or scope-verified URL and stop at approval gates.
 
 1. Use designated test accounts and the minimum number of roles needed to examine boundaries.
 2. Keep secrets in an excluded local session store (`auth_sessions.local.json`). When the operator
@@ -201,9 +212,14 @@ python scripts/audit_engagement.py <work-dir>
 
 Do not close until all required phases are `complete` or justified `not_applicable`, every active
 candidate has a disposition, every confirmed finding has a redacted evidence reference, safety controls
-and write-approval decisions are recorded, cleanup is recorded, retest status is explicit, and
-`reports/final-report.md` exists.
+and write-approval decisions are recorded, cleanup is recorded, and reporting is complete when a
+reportable finding exists. If candidate validation produces no reportable finding, reporting is
+`not_applicable`; this is not a claim that the target is safe. The workflow has no separate retest
+phase; any later fix verification is recorded as an external/manual activity when applicable.
 
 The final response must identify the target and scope, tested and untested areas, confirmed findings,
 rejected candidates, unresolved gates, evidence and report paths, cleanup performed, and residual risk.
 If a single user action remains, finish all independent work first and request only that action.
+
+## Burp 抓包输入与认证态复核
+操作员已在 browser-edge/browser-firefox 登录并点击目标，且已在本机 Burp 抓好包。WZ 可接收 HAR/XML/TXT/cURL 离线输入，先做精确 scheme/host/port、scope 和 target-model 对账。需要 Burp MCP 时先 `npx -y mcporter@0.9.0 list http://127.0.0.1:9876 --allow-http`，再选择只读 history 工具，用 `--http-url`、`key=value`、`--output json` 调用。MCP 只读本机历史，不等于目标发包授权；MCP 不可用或无匹配时保留人工队列。认证态复核仍只限授权同 host、GET/HEAD、低速、最小预算，写/利用动作走审批门。原始 history、Cookie、Authorization、JWT、请求体值不得进入对话或普通产物。

@@ -48,13 +48,13 @@ def test_plan_single_target_single_param_and_forbidden_flags_absent():
     assert "--crawl" not in plan["args"] and "--blind" not in plan["args"] and "--update" not in plan["args"]
 
 
-def test_plan_unregistered_tool_fail_closed():
+def test_plan_registered_active_tool_executable():
     plan, _v = sxv.build_xsstrike_plan(
         dict(SCREENED), registry_path=PROJECT_ROOT / "tools" / "tool_registry.json"
     )
-    # batch16_6 起 xsstrike 已显式登记 unavailable（未下载）；核心不变量 executable=false 不变
-    assert plan["tool_status"] == "unavailable"
-    assert plan["executable"] is False
+    # 2026-09-07 起 xsstrike 已下载登记 active（方案 §5.1）；单候选约束不变
+    assert plan["tool_status"] == "active"
+    assert plan["executable"] is True
 
 
 def test_plan_active_tool_executable(tmp_path):

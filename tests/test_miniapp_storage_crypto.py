@@ -512,6 +512,84 @@ def test_crypto_secret_artifact_roundtrip_and_validation():
     assert "未知分支" in text
 
 
+def test_crypto_secret_passive_leak_dork_branch_never_upgrades():
+    """X-4（2026-09-07 P1）：passive_leak_dork 是零目标接触被动泄露面分支——
+    无升级规则（永不自动升级），dork 命中只产 secret_candidate 线索（signal）。"""
+    # 分支在列且无升级规则条目
+    assert "passive_leak_dork" in csr.CRYPTO_SECRET_BRANCHES
+    assert "passive_leak_dork" not in csr.CRYPTO_SECRET_UPGRADE_RULES
+    # dork 命中证据形态：仅形态观察 → signal
+    assert (
+        csr.sp_engine.grade_observation(
+            "passive_leak_dork",
+            ["public_leak_dork_hit_observed", "public_leak_documentation_link_observed"],
+            csr.CRYPTO_SECRET_UPGRADE_RULES,
+            csr.CRYPTO_SECRET_EVIDENCE_KINDS,
+            csr.CRYPTO_SECRET_INSUFFICIENT_KINDS,
+        )
+        == "signal"
+    )
+    # 伪造 confirmed 形态也不跨分支升级（dork 分支无对应确认形态）
+    assert (
+        csr.sp_engine.grade_observation(
+            "passive_leak_dork",
+            ["secret_reachable_confirmed"],
+            csr.CRYPTO_SECRET_UPGRADE_RULES,
+            csr.CRYPTO_SECRET_EVIDENCE_KINDS,
+            csr.CRYPTO_SECRET_INSUFFICIENT_KINDS,
+        )
+        == "signal"
+    )
+    # 越级行（status=candidate）被 validate 拒绝："永不升级"
+    row = {
+        "row_id": "row-dork-0001",
+        "branch": "passive_leak_dork",
+        "status": "candidate",
+        "evidence_kinds": ["public_leak_dork_hit_observed"],
+        "source": "operator_dork:github_code_search",
+        "evidence_ref": "notes/crypto/dork-hits.md:L7",
+        "precondition": "zero target contact; URL + snippet summary only",
+        "reason": "dork hit on AppID",
+    }
+    assert any("永不升级" in v for v in csr.validate_crypto_secret_candidate(row))
+    row_signal = {**row, "status": "signal"}
+    assert csr.validate_crypto_secret_candidate(row_signal) == []
+
+
+def test_crypto_secret_passive_leak_dork_screening_stays_signal():
+    """X-4 筛选端到端：dork 命中观察 → 候选行 signal、分支汇总 inconclusive
+    （线索非确定性结果），artifact 校验通过。"""
+    rows, summaries, violations = csr.screen_crypto_secret_observations(
+        [
+            _obs(
+                "passive_leak_dork",
+                {"public_leak_dork_hit_observed": True},
+                source="operator_dork:github_code_search",
+                reason="AppID dork hit in third-party public repo (URL + snippet only)",
+            ),
+            _obs(
+                "passive_leak_dork",
+                {},
+                applicability="not_applicable",
+                reason="no dorkable identifiers (AppID/company name/backend domain)",
+            ),
+        ]
+    )
+    assert violations == []
+    assert [(r["branch"], r["status"]) for r in rows] == [("passive_leak_dork", "signal")]
+    by_branch = {s["branch"]: s for s in summaries}
+    dork = by_branch["passive_leak_dork"]
+    assert dork["branch_status"] == "inconclusive"
+    assert dork["status_counts"]["signal"] == 1
+    assert dork["tested_count"] == 0
+    artifact = csr.build_crypto_secret_review_artifact(
+        rows, summaries, violations, "operator_supplied_material",
+        "2026-09-07T12:00:00+08:00",
+    )
+    assert artifact["substatuses"]["passive_leak_dork"] == "inconclusive"
+    assert csr.validate_crypto_secret_review_artifact(artifact) == []
+
+
 def test_crypto_secret_redline_constants():
     # secret_candidate 红线：规格 1633 行原文语义 + 与契约 red_lines 互证
     assert "secret_candidate" in csr.SECRET_CANDIDATE_RED_LINE

@@ -46,7 +46,7 @@ def test_plan_local_rules_and_metrics_off():
     assert plan["metrics_off"] is True and plan["rules_local_only"] is True
     assert "--metrics=off" in plan["args"] and "--json" in plan["args"]
     assert plan["args"][plan["args"].index("--config") + 1] == str(rules)
-    assert plan["executable"] is False  # 真实 registry 未登记 semgrep
+    assert plan["executable"] is True  # 2026-09-07 起 semgrep vendored 登记 active（目录 path 语义）
 
 
 def test_plan_rejects_remote_rule_sources(tmp_path):

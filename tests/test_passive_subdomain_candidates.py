@@ -30,9 +30,9 @@ def test_subfinder_plan_passive_minimal_flags():
     )
     assert violations == []
     assert plan["passive_only"] is True and plan["single_domain"] is True
-    # batch16_6 起 subfinder 已显式登记 unavailable（未下载）
-    assert plan["tool_status"] == "unavailable"
-    assert plan["executable"] is False
+    # 2026-09-07 起 subfinder 已下载登记 active（方案 §5.1）；被动档旗标约束不变
+    assert plan["tool_status"] == "active"
+    assert plan["executable"] is True
     for flag in psc.SUBFINDER_FORBIDDEN_FLAGS:
         assert flag not in plan["args"]
     assert plan["args"][plan["args"].index("-d") + 1] == "example.com"

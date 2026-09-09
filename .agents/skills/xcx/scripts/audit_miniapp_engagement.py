@@ -111,6 +111,11 @@ STORAGE_PACKAGE_REVIEW_BRANCHES = {
         "custom_crypto",
         "weak_random_key_derivation",
         "debug_config_env_keys",
+        # passive_leak_dork（2026-09-07 P1，方案 §4 X-4）：GitHub/搜索引擎被动泄露面
+        # dork 分支，零目标接触；命中只产 secret_candidate（signal），永不自动升级。
+        # 既有工作区行不带该键 → legacy 容忍（_review_phase_issues 完成判据对缺失键
+        # 跳过），不产生新违例。
+        "passive_leak_dork",
     ),
 }
 STORAGE_PACKAGE_REVIEW_ARTIFACTS = {
@@ -242,10 +247,20 @@ WEBVIEW_JUMP_TARGETS = ("in_app", "external_app", "browser", "unknown")
 # 跳转判定子集（外部控制面/未确认）；命中行需非空 reason；sensitive_params 非空
 # 同样需 reason（对象 ID/tenant ID/scene 参数为规格 1678 行点名关注项）。
 WEBVIEW_REASON_JUMP_TARGETS = ("external_app", "browser", "unknown")
+# 后端组件筛查（2026-09-07 P1，方案 §4 X-1）：backend_web_api_testing 第一个复核
+# 分支与扫描产物路径。常量与 init 脚本同源，漂移由
+# tests/test_xcx_backend_component_screening.py 锁定。只在 phase 行带 substatuses
+# 键（新 seed）时生效；游标隔离：本审计只读 miniapp 游标文件，绝不读写 WZ 的
+# phase_status.json。
+BACKEND_COMPONENT_REVIEW_BRANCHES = {
+    "backend_web_api_testing": ("component_nday_screening",),
+}
+BACKEND_COMPONENT_SCREEN_ARTIFACT = "artifacts/backend-component/nday-screen.jsonl"
 ANALYZABLE_MATERIALS = {"package", "package_cache", "unpacked_source", "traffic_export"}
 PACKAGE_MATERIALS = {"package", "package_cache"}
 VALID_PHASE_STATUSES = {"pending", "in_progress", "complete", "blocked", "not_applicable"}
 OPEN_REVIEW_STATUSES = {"candidate", "needs_manual_validation"}
+REPORTABLE_REVIEW_STATUSES = {"confirmed", "accepted_risk", "fixed"}
 VALID_REVIEW_STATUSES = OPEN_REVIEW_STATUSES | {
     "approval_required", "confirmed", "rejected", "accepted_risk", "fixed",
     "retest_failed", "retest_passed", "duplicate", "out_of_scope", "needs_login", "blocked",
@@ -411,7 +426,14 @@ def _review_phase_issues(
                 "(all review branches must be on disk)"
             )
             substatuses = {}
+        # legacy 容忍（X-4，2026-09-07）：行内 substatuses 为非空 dict 但缺某分支键
+        # = 该分支加入前落盘的旧工作区（27 个既有 engagement），缺失键不判违例；
+        # 新 seed 的键集含全部分支（空串仍被强制）。整体缺失（非 dict）不属 legacy，
+        # 逐分支违例照常产生。
+        recorded = bool(substatuses)
         for branch in branches:
+            if recorded and branch not in substatuses:
+                continue
             value_text = str(substatuses.get(branch, "") or "").strip()
             if not value_text:
                 issues.append(
@@ -893,6 +915,83 @@ def webview_bridge_links_issues(
     return sub_issues + row_issues + completion_issues
 
 
+def backend_component_screening_issues(
+    root: Path, phase_row: dict[str, Any] | None
+) -> list[str]:
+    """backend_web_api_testing 组件筛查审计（2026-09-07 P1，方案 §4 X-1）。
+
+    只在 phase 行带 substatuses 键（新 seed）时生效：分支键/值合法性 + 完成可证明性
+    ——tested 必须 artifacts/backend-component/nday-screen.jsonl 在盘；not_applicable
+    须 phase reason 非空（无 in-scope 自有后端 host 一类理由）。既有工作区行不带该键
+    → legacy 容忍不判违例（与 wz known_vuln_triage 的 P0 先例同款；init 亦不做
+    resume 强插）。游标隔离红线：本规则只消费传入的 miniapp 游标行，绝不读写 WZ 的
+    phase_status.json。"""
+    phase = "backend_web_api_testing"
+    if phase_row is None:
+        return []
+    substatuses = phase_row.get("substatuses")
+    if substatuses is None:
+        return []  # legacy workspace（X-1 seed 之前的行）：容忍
+    if not isinstance(substatuses, dict):
+        return [f"{phase}: substatuses must be an object keyed by review branch"]
+    branches = BACKEND_COMPONENT_REVIEW_BRANCHES[phase]
+    issues: list[str] = []
+    for key, value in substatuses.items():
+        name = str(key).strip()
+        if not name:
+            issues.append(f"{phase}: substatuses contains an empty branch key")
+            continue
+        if name not in branches:
+            issues.append(
+                f"{phase}: unknown review branch {name!r} (backend_component_screening)"
+            )
+            continue
+        value_text = str(value).strip()
+        if not value_text:
+            continue  # 空串 = 未记录，仅完成时强制
+        if value_text not in COVERAGE_SUBSTATUSES:
+            issues.append(
+                f"{phase}.{name}: invalid substatus {value_text!r} "
+                f"(allowed: {sorted(COVERAGE_SUBSTATUSES)})"
+            )
+    status = str(phase_row.get("status", "")).strip()
+    if status in {"complete", "not_applicable"}:
+        for branch in branches:
+            if branch not in substatuses:
+                continue  # legacy 键缺失容忍（同 _review_phase_issues 语义）
+            value_text = str(substatuses.get(branch, "") or "").strip()
+            if not value_text:
+                issues.append(
+                    f"{phase}: phase {status} but branch {branch} has no recorded substatus"
+                )
+                continue
+            if value_text not in PROVEN_SUBSTATUSES:
+                issues.append(
+                    f"{phase}: phase {status} but branch {branch} is {value_text!r}; "
+                    "only proven tested/not_applicable closes the phase"
+                )
+                continue
+            if value_text == "tested" and not (root / BACKEND_COMPONENT_SCREEN_ARTIFACT).is_file():
+                issues.append(
+                    f"{phase}.{branch}: tested but {BACKEND_COMPONENT_SCREEN_ARTIFACT} is missing"
+                )
+            if value_text == "not_applicable" and not str(phase_row.get("reason", "") or "").strip():
+                issues.append(
+                    f"{phase}.{branch}: not_applicable lacks a phase reason "
+                    "(silent omission is forbidden)"
+                )
+    return issues
+
+
+def reportable_review_items(ledger: list[dict[str, str]]) -> list[str]:
+    """Return active review item IDs that require a final report."""
+    return [
+        row.get("item_id", "<missing>")
+        for row in ledger
+        if row.get("status") in REPORTABLE_REVIEW_STATUSES
+    ]
+
+
 def audit(root: Path) -> dict[str, Any]:
     engagement = read_json(root / "engagement.json")
     miniapp = read_json(root / "miniapp.json")
@@ -964,6 +1063,11 @@ def audit(root: Path) -> dict[str, Any]:
             issues.extend(cloud_json_review_issues(root, cloud_phase, phases.get(cloud_phase)))
     for webview_phase in WEBVIEW_REVIEW_BRANCHES:
         issues.extend(webview_bridge_links_issues(root, webview_phase, phases.get(webview_phase)))
+    issues.extend(
+        backend_component_screening_issues(
+            root, phases.get("backend_web_api_testing")
+        )
+    )
     required = {name: row for name, row in phases.items() if bool(row.get("required", True))}
     blocked = [name for name, row in required.items() if row.get("status") == "blocked"]
     package_phase_names = ("package_inventory", "package_unpack_decompile", "source_reconstruction")
@@ -1036,6 +1140,9 @@ def audit(root: Path) -> dict[str, Any]:
     issues.extend(f"approval gate lacks exact requirement: {item}" for item in unreasoned_gates)
     issues.extend(f"rejected item lacks false-positive reason: {item}" for item in rejected_without_reason)
 
+    reportable_results = reportable_review_items(ledger)
+    reporting_required = bool(reportable_results)
+
     def done(name: str) -> bool:
         row = required.get(name)
         return bool(row and row.get("status") in {"complete", "not_applicable"})
@@ -1052,7 +1159,7 @@ def audit(root: Path) -> dict[str, Any]:
                            and report_files["meta_json"].stat().st_size > 0
                            and report_files["evidence_index"].is_file())
     report_exists = report_complete
-    if not report_complete:
+    if reporting_required and not report_complete:
         issues.append("final DOCX, findings.json, meta.json, and evidence/index.csv are required")
     if not auth_confirmed:
         state = "AUTHORIZATION_PENDING"
@@ -1080,9 +1187,7 @@ def audit(root: Path) -> dict[str, Any]:
         state = "EVIDENCE_PENDING"
     elif not done("cleanup"):
         state = "CLEANUP_PENDING"
-    elif not done("retest"):
-        state = "RETEST_PENDING"
-    elif not done("reporting") or not report_exists:
+    elif reporting_required and (not done("reporting") or not report_exists):
         state = "REPORT_PENDING"
     else:
         state = "CLOSED"
@@ -1113,6 +1218,9 @@ def audit(root: Path) -> dict[str, Any]:
         "review_counts": _counts([row.get("status", "") for row in ledger]),
         "open_review_items": open_review,
         "missing_evidence_items": missing_evidence,
+        "reportable_results": reportable_results,
+        "reporting_required": reporting_required,
+        "reporting_not_applicable": not reporting_required,
         "report_exists": report_exists,
         "issues": issues,
     }

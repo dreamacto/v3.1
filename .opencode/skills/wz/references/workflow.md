@@ -88,7 +88,10 @@ suffix-filters results to in-domain hosts only. Post-processing rules:
 
 - Resolved in-domain subdomains go into `scope.csv` as `in_scope` with `source=subdomain_dns`
   (domain-level authorization covers them); third-party or out-of-domain hits stay
-  `confirmation_required` and are never probed.
+  `confirmation_required` and are never probed. The scope row must retain
+  `matched_scope_anchor`, `scope_match_kind` (`domain_suffix`/`wildcard`) and
+  `domain_authorized=true`; this is automatic scope inheritance only and does not
+  grant active-testing or high-risk authorization.
 - Sync every new host into `notes/target-model.md` and the endpoint inventory the same phase.
 - If the tool is unavailable or the operator explicitly wants passive-only for this target, record
   that decision and the reason in the phase note (negative space) — silent omission is forbidden;
@@ -101,6 +104,11 @@ For confirmed assets, collect DNS resolution, reachable schemes and ports, redir
 TLS metadata, server behavior, body fingerprints, favicon/hash where useful, and service-health changes.
 Run active discovery with the configured low-rate profile and pause on target instability. Resolve
 wildcard DNS and soft-404 behavior before trusting enumeration results.
+
+Fingerprint comparison has a managed backup library: `tools/managed/fingerprinthub/FingerprintHub-main/`
+(runtime=data in the tool registry) — match collected body/favicon fingerprints against it locally to
+enrich product identification feeding `fingerprint_deepening` and known_vuln_triage product screening.
+Local comparison only: the library is never fetched, updated, or pulled over the network by this phase.
 
 ### Application mapping
 
@@ -132,6 +140,42 @@ resolves to a file inside the workspace. The mapping phase may only be marked co
 substatuses are recorded and provable from their artifacts; a subphase that cannot proceed keeps the
 phase open as `blocked`/`in_progress` with the substatus recording why.
 
+For full offline endpoint extraction instead of JS chunk sampling (P1-6, 2026-09-07), run
+`python tools/managed/jsfinder/JSFinder.py -f <local js file or dir>` over the collected JS chunks and
+merge the extracted endpoints/subdomains into the endpoint inventory — sampling undersaturation is a
+mapping gap, and full extraction keeps the same candidate discipline (an extracted endpoint is surface
+knowledge, not a finding).
+
+### Known-vulnerability screening (known_vuln_triage, 2026-09-07)
+
+After application mapping establishes hosts, tech stack, and the endpoint inventory,
+run one dedicated screening phase against known vulnerability sources:
+
+1. **Input**: hosts from `artifacts/known-vuln/targets.txt` (in-scope, anonymous-reachable,
+   service-healthy hosts only) and the product list from `fingerprint_deepening` plan
+   (`artifacts/known-vuln/plan.md`).
+2. **Tier A detect-only sweep (standing authorization, see ROE Tier A)**: pinned managed
+   Nuclei engine + pinned managed templates + `wordlists/nuclei_detect_include.ids`
+   whitelist at -rl 1, per-host serial, -ni (no OOB) by default. The whitelist header is
+   the authorization boundary snapshot; never run templates outside it under this phase.
+3. **Triggered product screening**: only when the fingerprint names a product, run the
+   matching `*_triage.py` read-only screen (shiro/springboot/fastjson/struts2/tomcat/
+   weblogic/nacos/redis) with its documented no-exploitation profile.
+4. **CN OA branch (Tier B, per-target batch approval)**: only on confirmed CN-OA
+   fingerprints, run afrog keyword-selected PoCs in polite profile; hits go straight to
+   the candidate queue for per-candidate Tier C review.
+5. **Takeover branch**: resolve CNAMES for in-scope subdomain records (dnsx) and match
+   dangling-fingerprints; detection-only, no assertion without content control proof.
+6. **Disposition**: every hit passes truth_verify-style negative controls (uniform error
+   page, soft-404, WAF block comparison) before entering `review_ledger.csv` as
+   `candidate` with `source=known_vuln_triage`. Upgrade to validation only through the
+   existing approval gates. A scan with zero hits is recorded with template count,
+   list hash, and duration — zero hits is coverage evidence, not "target is safe".
+
+Artifacts: `artifacts/known-vuln/{targets.txt, plan.md, nuclei-detect.jsonl,
+afrog-product.json, product-screen.jsonl, takeover-cnames.jsonl}`. Substatuses:
+`template_detect`, `product_screen`, `takeover_check` (six-value coverage substatus each).
+
 ## 3. Security testing
 
 ### Baseline automation
@@ -139,6 +183,19 @@ phase open as `blocked`/`in_progress` with the substatus recording why.
 Run low-impact, read-only configuration and exposure checks first. Pin scope, rate, and templates.
 Preserve raw structured output. Review every match manually. Run intrusive or state-changing templates
 only when their exact behavior is permitted and the operator has approved the action.
+
+### Injection-surface budget (input_testing, 2026-09-07 W-4)
+
+The input_testing phase no longer runs a zero-payload pipeline. Injection probing is allowed under a
+Tier B single-target batch authorization with a strict whitelist and budget: SQLi markers only via
+`sqli_triage.py` in its shallow profile (boolean/error differential — no time-based, no UNION), XSS
+only via the `xss_candidate_triage.py` lazy inert-marker profile, plus one parameter-discovery run per
+host via arjun (GET first, `tools/managed/arjun/python`, at most one run per host). Budget = at most
+10 parameters per host, one request per parameter. Every probe execution is recorded as a row in
+`artifacts/input-testing/probe-ledger.jsonl`; `audit_input_testing` rejects non-whitelist scripts and
+over-budget runs (per-host parameters >10, more than one request per parameter, or a second arjun run
+on the same host). Anything beyond the whitelist — sqlmap and every exploitation-grade tool — stays
+behind the existing approval gates; SSRF stays a static-candidate surface per its own entry.
 
 ### Manual and browser testing
 
@@ -171,16 +228,16 @@ For confirmed findings, preserve a timestamp, target, account role, request desc
 response structure, minimal steps, impact, cleanup result, and evidence hash/reference. Keep raw data
 restricted and provide redacted report artifacts.
 
-### Cleanup and retest
+### Cleanup
 
 Remove test accounts, files, objects, webhooks, tokens, jobs, and other artifacts when authorized and
-required. Revoke sessions and verify restoration. Retest fixes with the original minimal proof and a
-nearby negative control. Record `retest_passed`, `retest_failed`, or `not_retested`.
+required. Revoke sessions and verify restoration. Later fix verification is external/manual and is not a
+workflow phase or closure prerequisite.
 
 ### Final report
 
 Include executive summary, scope, rules, methodology, coverage, findings, rejected high-priority
-candidates, limitations, gated tests, cleanup, retest, residual risk, evidence index, and appendices.
+candidates, limitations, gated tests, cleanup, residual risk, evidence index, and appendices.
 
 ## 5. Resume logic
 

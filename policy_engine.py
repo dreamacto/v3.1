@@ -8,6 +8,8 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from urllib.parse import urlparse
 
+from src.authorized_assessment.scope import classify_host, scope_entry_for_host
+
 
 DEFAULT_BLOCKED_ACTIONS = frozenset({
     "password_spray", "bruteforce", "webshell", "c2", "tunnel",
@@ -25,6 +27,9 @@ class PolicyDecision:
     target: str = ""
     phase: str = ""
     entrypoint: str = ""
+    matched_scope_anchor: str = ""
+    scope_match_kind: str = ""
+    domain_authorized: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -54,6 +59,30 @@ class PolicyEngine:
             self.blocked_actions = frozenset(configured) | DEFAULT_BLOCKED_ACTIONS
             self.valid = True
         self._target_keys = {self._target_key(getattr(t, "url", t)) for t in self.targets}
+        self._scope_entries = self._build_scope_entries(self.targets)
+
+    @staticmethod
+    def _build_scope_entries(targets: list) -> tuple[dict[str, object], ...]:
+        entries: list[dict[str, object]] = []
+        for target in targets:
+            host = getattr(target, "host", "")
+            if not host:
+                host = urlparse(str(getattr(target, "url", target) or "")).hostname or ""
+            mode = str(getattr(target, "scope_mode", "default_domain") or "default_domain")
+            entry = scope_entry_for_host(
+                host,
+                mode=mode,
+                source=str(getattr(target, "scope_source", "targets_file") or "targets_file"),
+            )
+            if getattr(target, "scope_anchor", ""):
+                entry["scope_anchor"] = getattr(target, "scope_anchor")
+                entry["host"] = getattr(target, "scope_anchor")
+            if getattr(target, "explicit_narrowing", False):
+                entry["scope_mode"] = "exact"
+                entry["domain_authorized"] = False
+                entry["explicit_narrowing"] = True
+            entries.append(entry)
+        return tuple(entries)
 
     @staticmethod
     def _target_key(value: object) -> str:
@@ -85,9 +114,14 @@ class PolicyEngine:
                 handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
         return decision
 
-    def _decision(self, allowed: bool, reason: str, *, action: str = "", target: str = "", phase: str = "") -> PolicyDecision:
-        return self._record(PolicyDecision(allowed, "allow" if allowed else "deny", reason,
-                                            action, target, phase, self.entrypoint))
+    def _decision(self, allowed: bool, reason: str, *, action: str = "", target: str = "", phase: str = "", match=None) -> PolicyDecision:
+        return self._record(PolicyDecision(
+            allowed, "allow" if allowed else "deny", reason, action, target, phase,
+            self.entrypoint,
+            getattr(match, "matched_anchor", ""),
+            getattr(match, "match_kind", ""),
+            bool(getattr(match, "domain_authorized", False)),
+        ))
 
     def authorize_target(self, url: str, context: dict | None = None) -> PolicyDecision:
         key = self._target_key(url)
@@ -95,9 +129,17 @@ class PolicyEngine:
             return self._decision(False, "invalid or incomplete policy configuration", target=url)
         if not key:
             return self._decision(False, "target must be an http(s) URL with a valid host", target=url)
-        if key not in self._target_keys:
-            return self._decision(False, "target is not in the approved target snapshot", target=url)
-        return self._decision(True, "target matches approved snapshot", target=url)
+        if key in self._target_keys:
+            return self._decision(True, "target matches approved snapshot", target=url)
+        parsed = urlparse(url)
+        match = classify_host(parsed.hostname, self._scope_entries)
+        if match.scope_state == "in_scope" and (
+            match.match_kind in {"domain_suffix", "wildcard"}
+            or (match.match_kind == "exact_host" and match.domain_authorized)
+        ):
+            decision = self._decision(True, match.reason, target=url, match=match)
+            return decision
+        return self._decision(False, "target is not in the approved target snapshot", target=url)
 
     def authorize_action(self, action: str, target: str = "", phase: str = "", context: dict | None = None) -> PolicyDecision:
         action = str(action or "").strip().lower()

@@ -16,6 +16,9 @@
     "matched_rules": {"type": "array", "items": {"type": "string"}},
     "reason": {"type": "string", "minLength": 1},
     "required_approval": {"type": ["string", "null"]},
+    "matched_scope_anchor": {"type": "string"},
+    "scope_match_kind": {"type": "string", "enum": ["", "exact_host", "domain_suffix", "wildcard"]},
+    "domain_authorized": {"type": "boolean"},
     "expires_at": {"type": ["string", "null"], "format": "date-time"},
     "created_at": {"type": "string", "format": "date-time"}
   },

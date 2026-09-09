@@ -8,6 +8,11 @@
 - `scripts/imports/`：外部平台、范围和目标清单导入器。
 - `scripts/browser/`：浏览器控制台脚本和人工采集辅助。
 - `scripts/reporting/`：DOCX、报告渲染和离线报告构建辅助。
+  - `scripts/reporting/engagement_board.py`：全目标作战台——跨 engagement 只读聚合双流程游标、
+    闲置度、待操作员任务、台账闭环与 run 复核态。子命令：无参总板（`--write` 落
+    `engagements/_BOARD.md`）、`--tasks`、`--runs N`、`--focus <名称> [--json]`、
+    `--handoff <名称> [--stream wz|xcx]`、`--submit <名称>`、`--assets`、`--json`。
+    桌面与 `launchers/` 有同名 BAT（`全目标作战台.bat`），入口已登记 `AGENTS.md`。
 - `scripts/butian_toolkit/`：补天平台浏览器控制台工具集。
 - `src/authorized_assessment/artifacts/`：已迁移的离线文件完整性与删除审计实现。
 - `src/authorized_assessment/analysis/`：已迁移的离线产品和隐私分析实现。

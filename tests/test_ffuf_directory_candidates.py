@@ -60,13 +60,13 @@ def _write_registry(tmp_path: Path, status: str, with_binary: bool = True) -> Pa
 
 # ---------- plan ----------
 
-def test_plan_unregistered_tool_is_fail_closed():
+def test_plan_registered_active_tool_keeps_low_rate_profile():
     plan, violations = fdc.build_ffuf_plan(
         "https://target.example.com", output_path="out.json", registry_path=PROJECT_ROOT / "tools" / "tool_registry.json"
     )
-    # batch16_6 起 ffuf 已显式登记 unavailable（未下载）；核心不变量 executable=false 不变
-    assert plan["tool_status"] == "unavailable"
-    assert plan["executable"] is False
+    # 2026-09-07 起 ffuf 已下载登记 active（方案 §5.1）；低速档不变量不受登记状态影响
+    assert plan["tool_status"] == "active"
+    assert plan["executable"] is True
     assert plan["recursion"] is False and plan["threads"] == 1
     assert plan["delay_seconds"] >= fdc.FFUF_MIN_DELAY_SECONDS
     assert "-recursion" not in plan["args"]

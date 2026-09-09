@@ -101,8 +101,8 @@
       "auto": true,
       "tools": [
         "product_triage.py",
-        "Nuclei 3.8.0 plus nuclei-templates 10.4.4 as maintained core",
-        "afrog 3.5.3 for confirmed Chinese OA products",
+        "Nuclei 3.11.1 plus nuclei-templates 10.4.8 as maintained core",
+        "afrog 3.5.6 for confirmed Chinese OA products",
         "OA-EXPTOOL and dddd as legacy offline template references"
       ],
       "outputs": [
@@ -121,6 +121,33 @@
         "Map each product to one primary and one sampled backup tool branch.",
         "Classify upload, RCE, SQL injection, deserialization, auth bypass, default-login, and similar templates as approval-required.",
         "Default action is queue_only; no product-specific exploit tool is launched automatically."
+      ]
+    },
+    {
+      "id": "known_vuln_triage",
+      "title": "已知漏洞筛查（WZ 专用，默认不启用）",
+      "risk": "low",
+      "auto": false,
+      "enabled": false,
+      "tools": [
+        "nuclei detect-only include-list (wordlists/nuclei_detect_include.ids)",
+        "afrog CN OA product keyword (Tier B per-target batch approval)",
+        "triggered *_triage.py read-only product screens",
+        "dnsx takeover CNAME checks"
+      ],
+      "outputs": [
+        "artifacts/known-vuln/targets.txt",
+        "artifacts/known-vuln/plan.md",
+        "artifacts/known-vuln/nuclei-detect.jsonl",
+        "artifacts/known-vuln/afrog-product.json",
+        "artifacts/known-vuln/product-screen.jsonl",
+        "artifacts/known-vuln/takeover-cnames.jsonl"
+      ],
+      "rules": [
+        "WZ engagement 专用阶段（application_mapping 之后、unauthenticated_testing 之前）；一键 runner 流程默认不执行（enabled=false 且 auto=false，runner 行为零变化）。",
+        "Tier A 常备检测档（ROE.md 2026-09-07 增补）：nuclei 检测-only 白名单 wordlists/nuclei_detect_include.ids，-rl 1 同 host 串行 -ni 默认关 OOB；授权边界=白名单文件头政策注释。",
+        "afrog 仅指纹命中国内 OA 产品时按 Tier B 单目标批次授权运行（-polite 限速）；interactive/exploit 模板永不入白名单。",
+        "命中先过 truth_verify 式负控再进 review_ledger（source=known_vuln_triage, status=candidate）；升级验证走既有 Tier C 审批门。"
       ]
     },
     {

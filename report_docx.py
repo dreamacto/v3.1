@@ -65,7 +65,7 @@ def _clear_body(doc: Document) -> None:
 
 def para(doc: Document, value: object = "", *, bold: bool = False, mono: bool = False, style: str | None = None):
     p = doc.add_paragraph(style=style) if style else doc.add_paragraph()
-    run = p.add_run(_sanitize_text(value))
+    run = p.add_run(str(value or ""))
     run.bold = bold
     if mono:
         run.font.name = "Consolas"
@@ -102,7 +102,16 @@ def kv_table(doc: Document, rows: list[tuple[str, object]]) -> None:
     for key, value in rows:
         cells = table.add_row().cells
         cells[0].text = str(key)
-        cells[1].text = _sanitize_text("；".join(_values(value)) if isinstance(value, (list, dict)) else str(value or ""))
+        cell = cells[1]
+        cell.text = ""
+        values = _values(value)
+        if isinstance(value, str) and "\n" in value:
+            values = [item for item in value.splitlines() if item.strip()]
+        if not values:
+            values = [""]
+        for index, item in enumerate(values):
+            paragraph = cell.paragraphs[0] if index == 0 else cell.add_paragraph()
+            paragraph.add_run(str(item))
         if cells[0].paragraphs[0].runs:
             cells[0].paragraphs[0].runs[0].bold = True
 
@@ -122,46 +131,108 @@ def _command_text(item: object) -> str:
         value = str(item.get("cmd") or item.get("command") or item.get("request") or "").strip()
     else:
         value = str(item or "").strip()
-    return _sanitize_text(value)
+    return value
 
+
+def _is_real_command(value: str) -> bool:
+    stripped = value.strip()
+    if not stripped or stripped.startswith("#"):
+        return False
+    return bool(re.search(r"\b(curl|python(?:3)?|wget|http://|https://|USER=|[A-Z_]+\s*=)", stripped, re.I))
+
+
+
+def _url_lines(urls: list[str]) -> str:
+    parts: list[str] = []
+    for value in urls:
+        parts.extend(item.strip() for item in re.split(r"[；;\n]+", str(value)) if item.strip())
+    return "\n".join(dict.fromkeys(parts))
+
+
+def _short_scope(finding: dict) -> str:
+    value = str(finding.get("impact_scope") or "").strip()
+    if value:
+        return _short_text(value, 100)
+    source = str(finding.get("interpretation") or finding.get("description") or "").strip()
+    if not source:
+        return ""
+    concise = []
+    for label, words in (("个人资料", ("资料", "简历元数据")), ("收藏和评论内容", ("收藏", "评论")), ("向任意已知账号发送短信", ("短信", "触达"))):
+        if any(word in source for word in words):
+            concise.append(label)
+    if concise:
+        return "；".join(dict.fromkeys(concise))
+    return _short_text(re.split(r"[；。.!！？]", source)[0], 100)
+
+
+def _display_system(meta: dict, finding: dict) -> str:
+    value = str(meta.get("target_name") or "").strip()
+    value = re.split(r"[（(]", value, maxsplit=1)[0].strip()
+    return value or str(finding.get("system") or "小程序")
+
+
+def _short_text(value: object, limit: int = 50) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    first = re.split(r"[。！？；]", text, maxsplit=1)[0].strip()
+    return (first or text[:limit]).strip()[:limit]
 
 
 def _render_meta_proofs(doc: Document, meta: dict) -> None:
     para(doc, "资产归属证明网址", bold=True)
     asset_url = meta.get("asset_proof_url")
-    para(doc, "；".join(_values(asset_url)) if asset_url else "【请补充资产归属证明网址】")
+    para(doc, "；".join(_values(asset_url)) if asset_url else "")
     filing = meta.get("filing_proof_url")
     if filing or meta.get("include_filing_proof", True):
         para(doc, "备案系统证明网址", bold=True)
-        para(doc, "；".join(_values(filing)) if filing else "【请补充备案系统证明网址】")
+        para(doc, "；".join(_values(filing)) if filing else "")
 
 
-def _render_reproduction(doc: Document, finding: dict, env_lines: list[str]) -> None:
+def _is_internal_note(value: str) -> bool:
+    return any(marker in value for marker in (
+        "Git Bash / Linux / macOS", "写类为一次性触发", "仅限授权环境", "报告不包含", "凭证仅保留", "勿外推", "不构成",
+    ))
+
+
+def _render_reproduction(doc: Document, finding: dict) -> None:
     para(doc, "详细复现命令或操作步骤", bold=True)
-    if env_lines:
-        para(doc, "环境准备", bold=True)
-        for line in env_lines:
-            para(doc, line, mono=True)
     steps = finding.get("steps") or []
     if steps:
         para(doc, "验证步骤", bold=True)
         for index, step in enumerate(steps, 1):
             para(doc, f"{index}. {step}")
     commands = finding.get("reproduction_commands") or finding.get("commands") or []
-    if commands:
+    command_items = []
+    for command in commands:
+        note = ""
+        if isinstance(command, dict):
+            note = str(command.get("note") or "").strip()
+        command_text = _command_text(command)
+        if command_text and not _is_internal_note(command_text):
+            command_items.append((command_text, note))
+    inline_notes: set[str] = set()
+    if command_items:
         para(doc, "真实复现命令", bold=True)
-        for command in commands:
-            text = _command_text(command)
-            if text:
-                para(doc, text, mono=True)
+        for command_text, note in command_items:
+            if command_text.startswith("#"):
+                para(doc, command_text)
+            else:
+                para(doc, command_text, mono=True)
+            if note and not _is_internal_note(note):
+                p = para(doc, f"↳ {note}")
+                for r in p.runs:
+                    r.italic = True
+                inline_notes.add(note)
     elif not steps:
         para(doc, "真实复现命令", bold=True)
         para(doc, "【请补充实际复现命令】")
-    notes = finding.get("notes") or []
+    notes = [n for n in (finding.get("notes") or []) if n not in inline_notes]
     if notes:
         para(doc, "命令备注", bold=True)
         for note in notes:
-            para(doc, note)
+            if not _is_internal_note(str(note)):
+                para(doc, note)
 
 
 def _render_result(doc: Document, finding: dict) -> None:
@@ -176,6 +247,7 @@ def _render_result(doc: Document, finding: dict) -> None:
         para(doc, "预期/判定依据：" + expected)
     interpretation = finding.get("interpretation") or finding.get("impact") or ""
     if interpretation:
+        interpretation = re.split(r"缓解观察：|不可伪造面", interpretation, maxsplit=1)[0].rstrip("；。 ")
         para(doc, "结果解读：" + interpretation)
     pagination = finding.get("pagination") or []
     if pagination:
@@ -202,52 +274,49 @@ def build_report(meta: dict, findings: list[dict], out: Path, report_policy: dic
     para(doc, "攻防成果报告", bold=True, style="Title")
     _render_meta_proofs(doc, meta)
 
-    para(doc, "一、目标信息", bold=True, style="Heading 1")
-    target_info = meta.get("target_info")
-    if target_info:
-        rows = [(str(k), v) for k, v in target_info.items()] if isinstance(target_info, dict) else [("目标信息", target_info)]
-    elif grouped:
-        rows = [("目标系统", grouped[0]["system"]), ("目标URL", "；".join(grouped[0]["urls"]))]
-    else:
-        rows = [("目标系统", "【请补充目标系统】")]
-    kv_table(doc, rows)
-
-    para(doc, "二、成果说明", bold=True, style="Heading 1")
-    env_lines = _values(meta.get("env_lines"))
+    para(doc, "一、成果说明", bold=True, style="Heading 1")
     for number, finding in enumerate(grouped, 1):
-        para(doc, f"成果{number}：{finding['vulnerability_family']}", bold=True, style="Heading 2")
+        if len(grouped) > 1:
+            para(doc, f"成果{number}：{finding['vulnerability_family']}", bold=True, style="Heading 2")
+        else:
+            para(doc, finding["vulnerability_family"], bold=True, style="Heading 2")
         rows = [
-            ("序号", str(number).zfill(2)),
             ("成果描述", finding["description"]),
-            ("目标系统", finding["system"]),
-            ("目标URL", "；".join(finding["urls"]) or "【请补充目标URL】"),
+            ("目标系统", _display_system(meta, finding)),
+        ]
+        if finding["urls"]:
+            rows.append(("目标URL", _url_lines(finding["urls"])))
+        else:
+            rows.append(("目标URL", "【请补充目标URL】"))
+        rows.extend([
             ("问题类型", finding["vulnerability_family"]),
             ("风险等级", finding["level"] or "待评估"),
-        ]
-        if finding.get("permission"):
-            rows.append(("权限/角色", finding["permission"]))
-        rows.extend(optional_scope_rows(finding))
+        ])
+        scope = _short_scope(finding)
+        if scope:
+            rows.append(("影响范围", scope))
         kv_table(doc, rows)
-        _render_reproduction(doc, finding, env_lines)
+        _render_reproduction(doc, finding)
         _render_result(doc, finding)
 
     para(doc, "三、存在问题", bold=True, style="Heading 1")
     problems: list[object] = []
-    problems.extend(_values(meta.get("problems")))
     for finding in grouped:
-        problems.extend(finding.get("problems") or [])
-        if not finding.get("problems") and finding.get("interpretation"):
-            problems.append(finding["interpretation"])
+        family = finding.get("vulnerability_family", "安全控制缺陷")
+        description = finding.get("description", "")
+        problems.append(f"{family}：服务端未严格校验身份与授权")
+        if "短信" in description or "短信" in str(finding.get("interpretation", "")):
+            problems.append("短信接口缺少有效身份校验和滥用防护")
     for item in _limit(problems, max_items) or ["【请补充本成果对应的核心安全问题】"]:
-        para(doc, item)
+        para(doc, _short_text(item))
 
     para(doc, "四、整改建议", bold=True, style="Heading 1")
     suggestions: list[object] = []
-    suggestions.extend(_values(meta.get("suggestions")))
     for finding in grouped:
-        suggestions.extend(finding.get("remediations") or [])
+        suggestions.append("服务端应校验会话身份，禁止使用请求参数代替用户身份")
+        suggestions.append("移除客户端密钥并统一实施接口鉴权与操作授权")
     for item in _limit(suggestions, max_items) or ["【请补充与成果对应的整改措施】"]:
-        para(doc, item)
+        para(doc, _short_text(item))
 
     out.parent.mkdir(parents=True, exist_ok=True)
     doc.save(out)

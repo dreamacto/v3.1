@@ -13,7 +13,7 @@
 | `notes/safety-controls.md` | Rate limits, read-only automation mode, write-approval gates, stop thresholds |
 | `artifacts/endpoint-inventory.csv` | Methods, routes, parameters, auth, roles, source, status |
 | `evidence/index.csv` | Evidence IDs, finding IDs, timestamps, hashes, sensitivity, paths |
-| `reports/攻防成果报告_<engagement>_<日期>.docx` | **Final deliverable（主交付，2026-08-23 起）**：由 `python report_docx.py --meta reports/meta.json --findings reports/findings.json` 生成（或 `--from-ledger` 出骨架再补）；红色【需截图】标注补齐前报告未完成 |
+| `reports/攻防成果报告_<engagement>_<日期>.docx` | **Final deliverable（主交付，2026-08-23 起）**：由 `python report_docx.py --meta reports/meta.json --findings reports/findings.json` 生成（或 `--from-ledger` 出骨架再补）；红色【需截图】标注补齐前报告未完成；命令须 Git Bash 实跑通过并附原始输出，文案面向漏洞审核员、禁止项目/本地内部术语，无“限制与观察”章节（2026-09-09 硬规则，详见 evidence-reporting.md） |
 | `reports/final-report.md` | Working notes（过程稿，供 findings.json 取材，不再作为对外交付物） |
 
 The initializer creates empty templates for these artifacts. Populate them with structured data as the
@@ -53,4 +53,6 @@ business data. Prefer field names, counts, status, length, hashes, and controlle
 The engagement is closed only when the user-supplied initial target basis is recorded and scope states
 are resolved; required phases are complete or justified not applicable; active ledger rows are disposed;
 confirmed findings have evidence; cleanup is complete or justified; safety controls and write-approval
-decisions are recorded; retest is recorded; and the final report exists.
+decisions are recorded; when candidate validation has no reportable finding, reporting is
+`not_applicable`; otherwise the final report exists. There is no separate retest phase; later fix
+verification is recorded as an external/manual activity when applicable.

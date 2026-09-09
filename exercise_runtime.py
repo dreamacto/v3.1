@@ -50,6 +50,10 @@ class Target:
     scheme: str = ""
     port: int | None = None
     source_line: int = 0
+    scope_mode: str = "default_domain"
+    scope_anchor: str = ""
+    explicit_narrowing: bool = False
+    scope_source: str = "targets_file"
 
 
 @dataclass
@@ -166,6 +170,8 @@ def parse_target_line(line: str, line_no: int) -> Target | None:
         scheme=parsed.scheme.lower(),
         port=port,
         source_line=line_no,
+        scope_mode="default_domain",
+        scope_source="targets_file",
     )
 
 

@@ -15,6 +15,11 @@ from pathlib import Path
 from typing import Iterable
 from urllib.parse import urlsplit
 
+_ROOT = Path(__file__).resolve().parents[4]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+from src.authorized_assessment.scope import classify_host, classify_scope_entry, normalize_scope_host, registrable_parent
+
 try:
     from phase_status_routing import MINIAPP_PHASE_STATUS_FILENAME, resolve_phase_status, route_metadata
 except ImportError:
@@ -76,7 +81,6 @@ PHASES = (
     "candidate_validation",
     "evidence",
     "cleanup",
-    "retest",
     "reporting",
 )
 
@@ -149,6 +153,10 @@ STORAGE_PACKAGE_REVIEW_BRANCHES = {
         "custom_crypto",
         "weak_random_key_derivation",
         "debug_config_env_keys",
+        # passive_leak_dork（2026-09-07 P1，方案 §4 X-4）：GitHub/搜索引擎被动
+        # 泄露面 dork 分支（零目标接触，命中只产 secret_candidate 线索）。仅新
+        # seed 带该键；既有工作区行缺键由 audit 的 legacy 规则容忍。
+        "passive_leak_dork",
     ),
 }
 STORAGE_PACKAGE_REVIEW_ARTIFACTS = {
@@ -302,6 +310,18 @@ WEBVIEW_CSV_FIELDS_BY_ARTIFACT = {
     WEBVIEW_DEEP_LINK_QUEUE_CSV: WEBVIEW_DEEP_LINK_CSV_FIELDS,
 }
 
+# 后端组件筛查（2026-09-07 P1，方案 §4 X-1）：backend_web_api_testing 的第一个复核
+# 分支（coverage_substatus 种子键）。跨流程复用 WZ 检测引擎（nuclei Tier A 白名单 +
+# 触发式 *_triage.py + springboot_triage 检测档），游标隔离不变——xcx 只写
+# phase_status.miniapp.json，绝不碰 WZ 的 phase_status.json。仅新 seed 生效：既有
+# 工作区的行不带该 substatuses 键，audit 按 legacy 规则容忍（不做 resume 强插，
+# 与 wz known_vuln_triage 的 P0 先例一致）。常量与 audit 脚本同源，漂移由
+# tests/test_xcx_backend_component_screening.py 锁定。
+BACKEND_COMPONENT_REVIEW_BRANCHES = {
+    "backend_web_api_testing": ("component_nday_screening",),
+}
+BACKEND_COMPONENT_SCREEN_ARTIFACT = "artifacts/backend-component/nday-screen.jsonl"
+
 
 def auth_review_skeleton(phase: str) -> dict:
     branches = AUTH_REVIEW_BRANCHES[phase]
@@ -366,7 +386,7 @@ MATERIAL_FIELDS = (
 HOST_FIELDS = (
     "host_id", "active", "host", "service_type", "scope_state", "owner",
     "source_material", "source_location", "ownership_rationale", "permitted_actions",
-    "confirmed_at", "notes",
+    "confirmed_at", "matched_scope_anchor", "scope_match_kind", "domain_authorized", "scope_mode", "notes",
 )
 
 ENDPOINT_FIELDS = (
@@ -386,6 +406,55 @@ LEDGER_FIELDS = (
     "source", "validation_plan", "validation_result", "evidence_ref", "finding_id", "owner",
     "updated_at",
 )
+
+
+def append_domain_authorized_host(hosts_path: Path, host: str, *, service_type: str = "backend", owner: str = "") -> bool:
+    """Idempotently add an in-domain mini-program backend host to hosts.csv."""
+    candidate = normalize_scope_host(host)
+    if not candidate or not hosts_path.is_file():
+        return False
+    with hosts_path.open(encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        rows = list(reader)
+        existing_fields = list(reader.fieldnames or HOST_FIELDS)
+    fields = list(dict.fromkeys([*existing_fields, *HOST_FIELDS]))
+    if fields != existing_fields:
+        with hosts_path.open("w", encoding="utf-8-sig", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+    result = classify_host(candidate, rows)
+    anchor_confirmed = any(
+        normalize_scope_host(row.get("host")) == result.matched_anchor
+        and str(row.get("scope_state", "")).strip() == "in_scope"
+        and str(row.get("domain_authorized", "")).strip().lower() in {"1", "true", "yes"}
+        for row in rows
+    )
+    if not anchor_confirmed or result.scope_state != "in_scope" or result.match_kind not in {"domain_suffix", "wildcard"}:
+        return False
+    if any(normalize_scope_host(row.get("host")) == candidate for row in rows):
+        return False
+    row = {field: "" for field in HOST_FIELDS}
+    row.update({
+        "host_id": hashlib.sha256(candidate.encode("utf-8")).hexdigest()[:16],
+        "active": "true",
+        "host": candidate,
+        "service_type": service_type,
+        "scope_state": "in_scope",
+        "owner": owner,
+        "source_material": "domain_authorized_subdomain",
+        "source_location": result.matched_anchor,
+        "ownership_rationale": result.reason,
+        "permitted_actions": "read_only",
+        "confirmed_at": now(),
+        "matched_scope_anchor": result.matched_anchor,
+        "scope_match_kind": result.match_kind,
+        "domain_authorized": "true",
+        "notes": "从已登记域级授权根域自动纳入；仍受 XCX authorization/active_testing 门约束",
+    })
+    with hosts_path.open("a", encoding="utf-8-sig", newline="") as handle:
+        csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore").writerow(row)
+    return True
 
 
 def now() -> str:
@@ -731,6 +800,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--window", default="", help="Authorized testing window.")
     parser.add_argument("--rules", default="", help="Rules-of-engagement reference.")
     parser.add_argument("--rate", default="", help="Approved request-rate note.")
+    parser.add_argument("--scope-root", default="", help="Explicit authorized domain root for automatic child-host inheritance")
     parser.add_argument("--resume", action="store_true", help="Resume the same workspace.")
     return parser.parse_args()
 
@@ -748,6 +818,14 @@ def main() -> int:
 
     platform = detected_platform if args.platform == "auto" else args.platform
     platform = platform if platform != "unknown" else "other"
+    if args.scope_root:
+        scope_root = normalize_scope_host(args.scope_root)
+        if not scope_root or not classify_scope_entry(scope_root, domain_authorized=True).scope_state == "in_scope":
+            print("ERROR: --scope-root must be a valid registrable domain.", file=sys.stderr)
+            return 2
+    else:
+        input_host = normalize_scope_host(urlsplit(details.get("path_or_value", "")).hostname or "")
+        scope_root = registrable_parent(input_host) if input_host else ""
     inferred_name = details.get("name", "")
     inferred_id = details.get("identifier", "")
     name = args.name.strip() or inferred_name
@@ -844,6 +922,19 @@ def main() -> int:
         )
     write_csv_if_missing(root / "materials.csv", MATERIAL_FIELDS, material_rows)
     write_csv_if_missing(root / "hosts.csv", HOST_FIELDS, [])
+    if scope_root:
+        with (root / "hosts.csv").open("a", encoding="utf-8-sig", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=HOST_FIELDS, extrasaction="ignore")
+            writer.writerow({
+                "host_id": hashlib.sha256(scope_root.encode("utf-8")).hexdigest()[:16],
+                "active": "true", "host": scope_root, "service_type": "backend",
+                "scope_state": "in_scope", "owner": args.operator.strip(),
+                "source_material": "default_domain_anchor" if not args.scope_root else "explicit_scope_root", "source_location": "input_host" if not args.scope_root else "--scope-root",
+                "ownership_rationale": authorization_ref, "permitted_actions": "read_only",
+                "confirmed_at": created, "matched_scope_anchor": scope_root,
+                "scope_match_kind": "domain_suffix", "domain_authorized": "true", "scope_mode": "default_domain" if not args.scope_root else "explicit_domain",
+                "notes": "域级授权根域；子域可自动继承 scope，仍受 active_testing 授权门约束",
+            })
     write_csv_if_missing(root / "endpoints.csv", ENDPOINT_FIELDS, [])
     write_csv_if_missing(root / "artifacts" / "decoding-ledger.csv", DECODING_FIELDS, [])
     write_csv_if_missing(root / "review_ledger.csv", LEDGER_FIELDS, [])
@@ -913,6 +1004,10 @@ def main() -> int:
                 phase_row["substatuses"] = {
                     name: "" for name in WEBVIEW_REVIEW_BRANCHES[phase]
                 }
+            elif phase in BACKEND_COMPONENT_REVIEW_BRANCHES:
+                phase_row["substatuses"] = {
+                    name: "" for name in BACKEND_COMPONENT_REVIEW_BRANCHES[phase]
+                }
             phases.append(phase_row)
         phase_path.write_text(
             json.dumps({
@@ -963,6 +1058,10 @@ def main() -> int:
             )
     for _webview_rel, _webview_fields in WEBVIEW_CSV_FIELDS_BY_ARTIFACT.items():
         write_csv_if_missing(root / _webview_rel, _webview_fields, [])
+    # 后端组件筛查产物目录（X-1）：只预建目录不种空文件——tested 完成判据要求真实
+    # 扫描输出 nday-screen.jsonl 存在（空壳文件不算覆盖证据，与 wz known-vuln 先例
+    # 的"目录预建、产物留扫"同构）。
+    (root / "artifacts" / "backend-component").mkdir(parents=True, exist_ok=True)
 
     write_text_if_missing(root / "notes" / "target-model.md", "# Target model\n\n## Host map\n\n## Technology stack\n\n## Entrypoints\n\n## Authentication topology\n\n## Attack-surface decisions\n\n## Excluded and untested areas\n")
     write_text_if_missing(root / "notes" / "operator_tasks.md", "# Operator tasks\n\n- [ ] Confirm authorization evidence, testing window, and scope before active testing.\n")
@@ -985,7 +1084,7 @@ def main() -> int:
         "## Confirmed findings\n\n"
         "## Rejected candidates and false positives\n\n"
         "## Blocked, approval-gated, and not-applicable areas\n\n"
-        "## Cleanup, retest, and residual risk\n\n"
+        "## Cleanup and residual risk\n\n"
         "## Evidence index\n\n",
     )
     write_text_if_missing(root / "reports" / ".gitkeep", "")

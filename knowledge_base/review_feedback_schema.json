@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Review feedback record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "feedback_id",
+    "candidate_id",
+    "disposition",
+    "observed_at",
+    "source",
+    "observation",
+    "provenance"
+  ],
+  "properties": {
+    "feedback_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "candidate_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "disposition": {
+      "enum": [
+        "confirmed",
+        "rejected",
+        "accepted_risk",
+        "duplicate",
+        "needs_login",
+        "approval_required",
+        "blocked"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "product_family": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "server_fingerprint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "response_status": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "content_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "body_similarity": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "path_pattern": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "negative_context": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "api_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": []
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_dir",
+        "artifact_ref"
+      ],
+      "properties": {
+        "run_dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    },
+    "notes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

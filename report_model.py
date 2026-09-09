@@ -104,8 +104,14 @@ def _data_volume(row: dict) -> str:
     return ""
 
 
+def _short_system_name(row: dict) -> str:
+    value = _first(row, "short_system", "miniapp_name", "target_name", "system", "app_name", "asset", default=asset_identity(row))
+    value = re.split(r"[（(]", value, maxsplit=1)[0].strip()
+    return value or "小程序"
+
+
 def _impact_scope(row: dict) -> str:
-    return _first(row, "impact_scope", "scope", "affected_scope", "data_scope", "affected_function", "function_scope")
+    return _first(row, "impact_scope", "scope", "affected_scope", "affected_function", "function_scope")
 
 
 def _text_values(row: dict, keys: tuple[str, ...]) -> list[str]:
@@ -167,7 +173,7 @@ def normalize_report_finding(row: dict, index: int = 1) -> dict:
     row = row if isinstance(row, dict) else {}
     url = canonical_url(row)
     family = vulnerability_family(row)
-    system = _first(row, "system", "target_name", "app_name", "asset", default=asset_identity(row))
+    system = _short_system_name(row)
     title = _first(row, "title", "summary", "finding_id", default=family)
     description = _first(row, "description", "desc", "summary", "title", default=f"{family}：{url or system}")
     commands, command_notes = _command_parts(row)
@@ -267,8 +273,7 @@ def aggregate_report_findings(rows: list[dict]) -> list[dict]:
 
 
 def optional_scope_rows(finding: dict) -> list[tuple[str, str]]:
-    if text(finding.get("data_volume")):
-        return [("涉及数据量", text(finding["data_volume"]))]
-    if text(finding.get("impact_scope")):
-        return [("影响范围", text(finding["impact_scope"]))]
-    return []
+    value = text(finding.get("impact_scope"))
+    if not value:
+        value = text(finding.get("data_volume"))
+    return [("影响范围", value)] if value else []

@@ -385,6 +385,9 @@ def test_rebuild_check_reports_violation_on_drifted_registry(tmp_path):
 # ---------- Batch 16 工具补充同步（batch16_6 / 规格 7.2） ----------
 
 BATCH16_TOOL_IDS = ("ffuf", "xsstrike", "dalfox", "subfinder", "dnsx", "semgrep", "codeql")
+# 2026-09-07 方案 §5.1：七个 Batch16 工具中六个已下载落位并登记 active（操作者批准），
+# codeql 未下载维持 unavailable（人工状态不得自动改判）。
+BATCH16_DOWNLOADED_TOOL_IDS = ("ffuf", "xsstrike", "dalfox", "subfinder", "dnsx", "semgrep")
 
 BATCH16_CAPABILITY_MODULES = (
     ROOT / "src" / "authorized_assessment" / "triage" / "ffuf_directory_candidates.py",
@@ -395,16 +398,23 @@ BATCH16_CAPABILITY_MODULES = (
 )
 
 
-def test_batch16_tools_registered_unavailable_without_config_key():
+def test_batch16_downloaded_tools_active_codeql_unavailable():
+    """2026-09-07 激活后的登记事实：六个已下载工具 active（version/checked_at 补齐），
+    codeql 未下载维持 unavailable；七者均无 config 候选表关联。"""
     data = _load(REGISTRY_PATH)
     by_id = {entry["tool_id"]: entry for entry in data["tools"] if isinstance(entry, dict)}
     for tool_id in BATCH16_TOOL_IDS:
         entry = by_id[tool_id]
-        assert entry["status"] == "unavailable", f"{tool_id} 必须显式 unavailable（本地未下载）"
         assert "config_key" not in entry, f"{tool_id} 无 config 候选表关联"
         for field in ("path", "version", "runtime", "known_limitations"):
             assert field in entry
         assert entry["known_limitations"].strip(), f"{tool_id} 必须写明已知限制"
+    for tool_id in BATCH16_DOWNLOADED_TOOL_IDS:
+        entry = by_id[tool_id]
+        assert entry["status"] == "active", f"{tool_id} 已下载落位，必须登记 active"
+        assert str(entry["version"]).strip(), f"{tool_id} 激活登记必须补 version（盘上事实）"
+        assert str(entry.get("checked_at") or "").strip(), f"{tool_id} 激活登记必须补 checked_at"
+    assert by_id["codeql"]["status"] == "unavailable", "codeql 未下载，必须维持 unavailable"
 
 
 def test_batch16_losers_recorded_explicitly_not_fuzzy():
@@ -483,5 +493,6 @@ def test_batch16_capability_modules_registry_tools_match(tmp_path):
         else:
             tool = resolver(None, ROOT)
         assert tool["registered"] is True
-        assert tool["status"] == "unavailable"
-        assert tool["executable"] is False
+        assert tool["status"] == "active", "2026-09-07 起已下载登记 active"
+        assert tool["path_resolved"] is True
+        assert tool["executable"] is True, "active 且路径可解析 → 计划可交操作者执行"

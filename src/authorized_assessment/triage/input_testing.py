@@ -1,15 +1,21 @@
-"""input_testing 编排器（实施规格 5.4 input_testing 子阶段；orchestration_only）。
+"""input_testing 编排器（实施规格 5.4 input_testing 子阶段；orchestration_only
++ W-4 受限 probe 预算制审计）。
 
-职责边界（操作员决定④⑥）：只负责编排与产物治理——初始化产物骨架、调用已接入的
-筛选域（injection_candidate_screening / parser_deserialization_screening /
-ssrf_candidate_screening / file_path_candidate_screening / browser_boundary_review
-的既有模块）、把候选与类别汇总落盘、审计产物完整性。不重复执行任何子阶段探测动作
-（不发请求、不发 payload、不签发 OOB token、不读本地文件）。
+职责边界（操作员决定④⑥ + 2026-09-07 P1 方案 §3 W-4）：只负责编排与产物治理——
+初始化产物骨架、调用已接入的筛选域（injection_candidate_screening /
+parser_deserialization_screening / ssrf_candidate_screening /
+file_path_candidate_screening / browser_boundary_review 的既有模块）、把候选与类别
+汇总落盘、审计产物完整性。编排器自身仍不重复执行任何子阶段探测动作（不发请求、
+不发 payload、不签发 OOB token、不读本地文件）；注入面探测从"零 probe"放宽为
+"白名单 probe + 预算"——由白名单脚本在阶段外执行，探测事件落 probe 台账
+（artifacts/input-testing/probe-ledger.jsonl），本模块只审计台账：非白名单脚本或
+超预算（每 host >10 参数 / 单参数多发 / arjun 单 host >1 次）必须被拒。
 
 产物路径：规格 5.4 明示 artifacts/ssrf/ 三件与 artifacts/browser-boundary/
 cors-csrf-cache.jsonl、reports/browser-boundary.md；injection/parser/file-path 三域
 路径为规格未明示部分的实现定义（artifacts/input-testing/、artifacts/file-path/），
-登记于 INPUT_TESTING_ARTIFACTS 单一事实源。全部离线、只读输入、幂等初始化。
+登记于 INPUT_TESTING_ARTIFACTS 单一事实源（probe 台账为 W-4 增补）。全部离线、
+只读输入、幂等初始化。
 """
 from __future__ import annotations
 
@@ -24,7 +30,7 @@ from authorized_assessment.triage import parser_deserialization as pdeser
 from authorized_assessment.triage import ssrf_candidate_screening as ssrf
 
 # 产物路径登记（相对 workspace 根；spec 5.4 明示 ssrf 三件与 browser-boundary 两件，
-# 其余为实现定义）。
+# 其余为实现定义；probe_ledger_jsonl 为 W-4 受限 probe 预算制增补，2026-09-07）。
 INPUT_TESTING_ARTIFACTS: dict[str, str] = {
     "injection_summary_csv": "artifacts/input-testing/injection-category-summary.csv",
     "injection_candidates_jsonl": "artifacts/input-testing/injection-candidates.jsonl",
@@ -37,7 +43,34 @@ INPUT_TESTING_ARTIFACTS: dict[str, str] = {
     "browser_boundary_report_md": "reports/browser-boundary.md",
     "file_path_summary_csv": "artifacts/file-path/file-path-category-summary.csv",
     "file_path_candidates_jsonl": "artifacts/file-path/file-path-candidates.jsonl",
+    "probe_ledger_jsonl": "artifacts/input-testing/probe-ledger.jsonl",
 }
+
+# ---------------------------------------------------------------------------
+# W-4 受限 probe 预算制（2026-09-07 P1，方案 §3 W-4 + tool_strategy input_testing）
+# ---------------------------------------------------------------------------
+
+# probe 白名单：marker 档 = 注入 marker 单发（每参数惰性/浅层判据）；discovery 档 =
+# 参数发现（arjun，单 host ≤1 次运行，GET 优先）。白名单外脚本（sqlmap/dalfox/
+# XSStrike/任何利用型工具）不属本阶段预算，仍走既有审批门。
+PROBE_TOOL_WHITELIST: dict[str, dict[str, str]] = {
+    "sqli_triage.py": {"profile": "shallow boolean/error differential", "kind": "marker"},
+    "xss_candidate_triage.py": {"profile": "lazy inert marker", "kind": "marker"},
+    "arjun": {"profile": "parameter discovery, GET first, single run per host", "kind": "discovery"},
+}
+# 预算（tool_strategy.json input_testing notes 同源）：每 host 注入 marker 参数 ≤10、
+# 每参数单发（1 次请求）；arjun 每 host ≤1 次发现运行。
+PROBE_BUDGET_MAX_PARAMS_PER_HOST = 10
+PROBE_BUDGET_MAX_REQUESTS_PER_PARAM = 1
+PROBE_DISCOVERY_MAX_RUNS_PER_HOST = 1
+PROBE_LEDGER_ROW_FIELDS = (
+    "host",
+    "tool",
+    "params",
+    "requests_per_param",
+    "evidence_ref",
+    "reason",
+)
 
 SSRF_REVIEW_QUEUE_FIELDS = (
     "candidate_id",
@@ -270,8 +303,84 @@ def _consistency_violations(
     return violations
 
 
+def validate_probe_ledger(rows: list[dict], label: str = "probe-ledger") -> list[str]:
+    """W-4 probe 台账审计：白名单 + 预算（2026-09-07 P1，方案 §3 W-4）。
+
+    行契约（PROBE_LEDGER_ROW_FIELDS）：host/tool/params/requests_per_param 必填，
+    evidence_ref/reason 可选。规则：tool 必须在 PROBE_TOOL_WHITELIST（非白名单即
+    拒）；marker 档每 host 去重参数并集 ≤10、每参数单发（requests_per_param=1）；
+    discovery 档（arjun）每 host ≤1 次运行。台账为空 = 零 probe（纯离线管线），
+    合法。返回违例列表（非空即超预算/非白名单事实，交 audit 与复核处置）。
+    """
+    violations: list[str] = []
+    host_params: dict[str, set[str]] = {}
+    host_discovery_runs: dict[str, int] = {}
+    for index, row in enumerate(rows, start=1):
+        row_label = f"{label}:L{index}"
+        if not isinstance(row, dict):
+            violations.append(f"{row_label}: 行必须是键值映射")
+            continue
+        for field in ("host", "tool", "params", "requests_per_param"):
+            if field not in row:
+                violations.append(f"{row_label}: 缺少必需字段 {field}")
+        host = str(row.get("host") or "").strip()
+        tool = str(row.get("tool") or "").strip()
+        if not host:
+            violations.append(f"{row_label}: host 为空")
+            continue
+        if tool not in PROBE_TOOL_WHITELIST:
+            violations.append(
+                f"{row_label}: 非白名单 probe 脚本 {tool!r}"
+                f"（允许值 {sorted(PROBE_TOOL_WHITELIST)}；利用型工具走既有审批门）"
+            )
+            continue
+        kind = PROBE_TOOL_WHITELIST[tool]["kind"]
+        params = row.get("params")
+        if not isinstance(params, list) or not params:
+            violations.append(f"{row_label}: params 必须为非空列表")
+            continue
+        param_names = [str(item).strip() for item in params]
+        if any(not item for item in param_names):
+            violations.append(f"{row_label}: params 含空参数名")
+            continue
+        requests = row.get("requests_per_param")
+        if not isinstance(requests, int) or isinstance(requests, bool):
+            violations.append(f"{row_label}: requests_per_param 必须为整数")
+            continue
+        if requests > PROBE_BUDGET_MAX_REQUESTS_PER_PARAM:
+            violations.append(
+                f"{row_label}: 超预算——单参数请求 {requests} 次 > 单发上限 "
+                f"{PROBE_BUDGET_MAX_REQUESTS_PER_PARAM}"
+            )
+        if requests < 1:
+            violations.append(f"{row_label}: requests_per_param 必须 ≥1")
+        if kind == "discovery":
+            host_discovery_runs[host] = host_discovery_runs.get(host, 0) + 1
+            if len(param_names) > 1:
+                violations.append(
+                    f"{row_label}: discovery 档单次运行只记一条（params 应为发现批次，"
+                    "不得按参数拆行绕过单 host ≤1 次预算）"
+                )
+        else:
+            host_params.setdefault(host, set()).update(param_names)
+    for host, params in sorted(host_params.items()):
+        if len(params) > PROBE_BUDGET_MAX_PARAMS_PER_HOST:
+            violations.append(
+                f"{label}: 超预算——host {host} 注入 marker 参数 {len(params)} 个 > "
+                f"每 host 上限 {PROBE_BUDGET_MAX_PARAMS_PER_HOST}"
+            )
+    for host, runs in sorted(host_discovery_runs.items()):
+        if runs > PROBE_DISCOVERY_MAX_RUNS_PER_HOST:
+            violations.append(
+                f"{label}: 超预算——host {host} 参数发现运行 {runs} 次 > "
+                f"每 host 上限 {PROBE_DISCOVERY_MAX_RUNS_PER_HOST}（arjun 单 host ≤1 次）"
+            )
+    return violations
+
+
 def audit_input_testing(workspace: Path) -> tuple[bool, list[str]]:
-    """审计 input_testing 产物：存在性 + 行契约 + summary↔候选一致性 + OOB manifest 红线。
+    """审计 input_testing 产物：存在性 + 行契约 + summary↔候选一致性 + OOB manifest 红线
+    + W-4 probe 台账白名单/预算。
 
     返回 (ok, violations)。产物从未生成（全部缺骨架）时同样报违例——审计不做静默通过。
     """
@@ -281,6 +390,10 @@ def audit_input_testing(workspace: Path) -> tuple[bool, list[str]]:
     if missing:
         violations.append(f"input_testing: 缺少产物文件 {missing}")
         return False, violations
+
+    probe_rows, v = _read_jsonl(artifact_path(workspace, "probe_ledger_jsonl"))
+    violations += v
+    violations += validate_probe_ledger(probe_rows)
 
     inj_summaries, v = _read_summary_csv(artifact_path(workspace, "injection_summary_csv"))
     violations += v

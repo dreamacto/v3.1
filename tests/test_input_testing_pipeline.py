@@ -63,7 +63,7 @@ SSRF_OBS = {
 
 def test_init_artifacts_creates_all_registered_and_is_idempotent(tmp_path):
     created = itp.init_input_testing_artifacts(tmp_path)
-    assert len(created) == len(itp.INPUT_TESTING_ARTIFACTS) == 11
+    assert len(created) == len(itp.INPUT_TESTING_ARTIFACTS) == 12
     for rel in itp.INPUT_TESTING_ARTIFACTS.values():
         assert (tmp_path / rel).is_file(), rel
     marker = tmp_path / itp.INPUT_TESTING_ARTIFACTS["oob_token_manifest"]

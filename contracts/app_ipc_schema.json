@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "contract": "app_ipc_schema",
+  "description": "APP IPC 组件边界契约（APP 流施工方案 docs/APP_WORKFLOW_CONSTRUCTION_PLAN.md §4 阶段 27 + §5.2，批次 B4/W19 上半落地；App 特有，xcx 无对应物，结构模板克隆 miniapp_webview_schema）。ipc_component_boundary 为七复核分支 × 两个固定 CSV 产物（artifacts/app/ipc/）：exported 组件清单 + deeplink 复核队列。分支→产物 1:1（exported_* 与 ios_extension_boundary → 组件清单；custom_scheme_deeplink/universal_link → deeplink 队列；完成语义 tested 需分支所属产物 ≥1 行）。静态清单离线完成（manifest 深解析/解包源码/授权材料/既有只读证据）；实际触发写组件的 intent/deeplink = device_instrumentation 审批门，审计只锁记录形状不校验触发。升级判据：只有能造成越权、敏感数据暴露或外部控制时才升级；仅 exported 存在性观察永不升级。分支与产物路径的唯一事实源为施工方案附录 B 种子（init/audit 脚本自包含复制）；与本契约的一致性由 scripts/maintenance/validate_run_contracts.py 锁定；src/authorized_assessment/app/ipc_component_review.py 同步在 B5 落地后由 tests/test_app_contract_sync.py 锁定。",
+  "type": "object",
+  "phases": {
+    "ipc_component_boundary": {
+      "artifact_format": "csv",
+      "description": "Android exported 组件（activity/service/receiver/provider）；自定义 scheme deeplink；universal link（apple-app-site-association）；iOS extension 边界。",
+      "branches": [
+        "exported_activity",
+        "exported_service",
+        "exported_receiver",
+        "exported_provider",
+        "custom_scheme_deeplink",
+        "universal_link",
+        "ios_extension_boundary"
+      ],
+      "artifacts": [
+        {
+          "artifact": "artifacts/app/ipc/component-inventory.csv",
+          "branches": [
+            "exported_activity",
+            "exported_service",
+            "exported_receiver",
+            "exported_provider",
+            "ios_extension_boundary"
+          ],
+          "csv_fields": [
+            "row_id",
+            "component_kind",
+            "component_name",
+            "exported",
+            "permission",
+            "intent_actions",
+            "scheme",
+            "authority",
+            "source_material",
+            "source_location",
+            "boundary_status",
+            "evidence_ref",
+            "reason",
+            "notes"
+          ],
+          "row_enums": {
+            "component_kind": ["activity", "service", "receiver", "provider", "ios_extension", "other"],
+            "exported": ["true", "false", "unknown"]
+          },
+          "row_requirements": {
+            "required_non_empty": ["row_id", "component_kind", "component_name", "exported"],
+            "reason_required_exported_values": ["true"],
+            "reason_required_when": "exported=true（外部可达攻击面必须留痕，静默 exported 不得充数）；permission/intent_actions/scheme/authority 可空（manifest 未必声明）"
+          }
+        },
+        {
+          "artifact": "artifacts/app/ipc/deeplink-review-queue.csv",
+          "branches": [
+            "custom_scheme_deeplink",
+            "universal_link"
+          ],
+          "csv_fields": [
+            "row_id",
+            "deep_link_pattern",
+            "scheme_type",
+            "sensitive_params",
+            "component_ref",
+            "jump_target",
+            "boundary_status",
+            "evidence_ref",
+            "reason",
+            "notes"
+          ],
+          "row_enums": {
+            "scheme_type": ["custom_scheme", "https_link", "other"],
+            "jump_target": ["in_app", "external_app", "browser", "unknown"]
+          },
+          "row_requirements": {
+            "required_non_empty": ["row_id", "deep_link_pattern", "scheme_type", "jump_target"],
+            "reason_required_jump_targets": ["external_app", "browser", "unknown"],
+            "reason_required_when": "sensitive_params 非空或 jump_target 命中外部跳转/未确认判定子集；component_ref 可空（deeplink 未必能归到已登记组件）"
+          }
+        }
+      ],
+      "boundary_status_rule": "两产物 boundary_status 均可空；非空须 ∈ finding 8 状态（signal/candidate/needs_manual_validation/confirmed/inconclusive/blocked/rejected/duplicate）——升级载体，只有能造成越权、敏感数据暴露或外部控制时才升级，仅 exported/scheme 存在性观察永不升级"
+    }
+  },
+  "coverage_substatus": {
+    "contract_ref": "coverage_substatus_schema",
+    "status_values": ["tested", "not_applicable", "blocked", "approval_required", "needs_manual_validation", "inconclusive"],
+    "proven_values": ["tested", "not_applicable"],
+    "note": "六值枚举与 proven 子集单一来源引用 coverage_substatus_schema（不复定义）；七分支进入 phase_status.app.json substatuses 种子，完成时审计强制全分支 proven。"
+  },
+  "red_lines": [
+    "静态清单离线完成（manifest 深解析/解包源码/授权材料/既有只读证据）；实际触发任何组件的 intent/deeplink（尤其写组件）= device_instrumentation 审批门，双钥匙缺一不可",
+    "deeplink 验证不自动拉起外部 App/浏览器，不向未确认归属的 provider/authority 发请求；scheme/jump_target 只来自授权材料或既有只读证据",
+    "sensitive_params 中的对象 ID/tenant ID/token 值属敏感值：值本身不复制到 CSV 明文列、日志、报告、prompt、ledger 或交接内容",
+    "确认证据只能来自既有只读证据的复核判定且可复现；confirmed 仍归漏洞成立五门判定，本契约只约束候选层筛选与 phase 完成可证明性"
+  ],
+  "invariants": [
+    "phases 键恰为 ipc_component_boundary（APP 33 阶段第 27 位，App 特有，xcx 无对应 phase）",
+    "branches 与 init/audit 的 substatuses 种子键集逐一相同（附录 B 种子）；skill 脚本自包含复制常量，validate_run_contracts 与测试锁定无漂移",
+    "artifacts[].artifact 路径与施工方案附录 B 种子逐一相同，相对 engagement 工作区根；两产物均为 CSV，表头由 init 种子、审计精确匹配",
+    "分支→产物 1:1：artifacts[].branches 无交集且并集恰为 phases.branches；完成语义 tested 需分支所属产物 ≥1 数据行、not_applicable 需 phase 行 reason 非空",
+    "row_enums 枚举与 init/audit 常量逐一相同（deeplink 队列 scheme_type/jump_target 与 webview 深链队列同源）；row_requirements.reason_required_* 为 audit 行级判定 reason 规则的契约留痕（审计实现为准）",
+    "骨架 CSV 仅表头；substatuses 值为空串=未记录，仅完成时强制；审计不得把空串当作 not_applicable"
+  ]
+}

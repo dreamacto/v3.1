@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0",
+  "contract": "app_auth_schema",
+  "description": "APP 认证态契约（APP 流施工方案 docs/APP_WORKFLOW_CONSTRUCTION_PLAN.md §4 阶段 17-19 + §5.2，批次 B4/W19 上半落地）。authentication 语义拆为 platform_login_exchange / session_token_lifecycle / signature_replay 三个 phase，每个 phase 产出一份 auth review JSON 产物（12 键形状：rows=统一筛选模式候选行 8 状态，summaries=分支级汇总，branch_status 为 coverage_substatus 六值之一）。platform_login_exchange 分支为 App 语境（OAuth 授权码、运营商一键登录、设备绑定、access_token 保管、uid 授权依据）；session_token_lifecycle 与 signature_replay 分支与 xcx 同名同义。仅在有人工提供的授权材料或本地流量时分析，不自动创建或滥用登录凭证；signature_replay 永不自动重放任何请求（含只读），写操作/并发验证仍归审批门。分支与产物路径的唯一事实源为施工方案附录 B 种子（.agents/skills/app/scripts/init_app_engagement.py 与 audit_app_engagement.py 自包含复制）；与本契约的一致性由 scripts/maintenance/validate_run_contracts.py 锁定；src/authorized_assessment/app/ 三模块常量同步在 B6 落地后由 tests/test_app_contract_sync.py 锁定。",
+  "type": "object",
+  "phases": {
+    "platform_login_exchange": {
+      "artifact": "artifacts/app/auth/platform-login-review.json",
+      "description": "平台登录交换（App 语境）：OAuth 授权码 code 一次性和过期；运营商一键登录（预取号 token/本机号码一键授权）与设备绑定；access_token 保管边界（是否只在安全存储与服务端，是否落入日志/剪贴板/普通存储）；uid/手机号是否被错误当成授权依据。",
+      "branches": [
+        "oauth_code_one_time",
+        "oauth_code_expiry",
+        "one_click_login_device_binding",
+        "access_token_custody",
+        "uid_authorization_basis"
+      ]
+    },
+    "session_token_lifecycle": {
+      "artifact": "artifacts/app/auth/session-lifecycle-review.json",
+      "description": "会话 token 生命周期：token 轮换、失效、注销；多设备登录；旧 token 对新版本接口；设备、用户、租户绑定。",
+      "branches": [
+        "token_rotation",
+        "token_revocation_logout",
+        "multi_device_login",
+        "stale_token_new_api",
+        "device_user_tenant_binding"
+      ]
+    },
+    "signature_replay": {
+      "artifact": "artifacts/app/auth/signature-replay-review.json",
+      "description": "签名重放：nonce/timestamp；签名规范化和重放窗口；设备、用户、租户绑定。只做离线重放假设与观察筛选，永不自动重放任何请求（含只读）。",
+      "branches": [
+        "nonce_timestamp",
+        "signature_canonicalization",
+        "replay_window",
+        "binding_scope"
+      ]
+    }
+  },
+  "coverage_substatus": {
+    "contract_ref": "coverage_substatus_schema",
+    "status_values": ["tested", "not_applicable", "blocked", "approval_required", "needs_manual_validation", "inconclusive"],
+    "proven_values": ["tested", "not_applicable"],
+    "note": "六值枚举与 proven 子集单一来源引用 coverage_substatus_schema（不复定义）。"
+  },
+  "observation_schema_version": "1.0",
+  "artifact_fields": {
+    "row_fields": [
+      "row_id",
+      "branch",
+      "status",
+      "evidence_kinds",
+      "source",
+      "evidence_ref",
+      "precondition",
+      "reason"
+    ],
+    "summary_fields": [
+      "branch",
+      "branch_status",
+      "applicability_counts",
+      "status_counts",
+      "tested_count",
+      "reason",
+      "source",
+      "precondition"
+    ],
+    "artifact_keys": [
+      "schema_version",
+      "contract",
+      "phase",
+      "observation_schema_version",
+      "row_fields",
+      "summary_fields",
+      "substatuses",
+      "rows",
+      "summaries",
+      "violations",
+      "authorization_basis",
+      "updated_at"
+    ]
+  },
+  "authorization_basis_values": ["operator_supplied_material", "local_traffic"],
+  "red_lines": [
+    "仅在有人工提供的授权材料或本地流量时分析，不自动创建或滥用登录凭证",
+    "运营商一键登录 token、device-id、Android ID/IDFA/IDFV 等设备与凭证标识属凭证纪律范围，不进报告/ledger/日志样例/prompt/截图/交接内容",
+    "signature_replay 永不自动重放任何请求（含只读）；写操作/并发验证仍归审批门，不自动重放写请求",
+    "uid/手机号/公开设备标识不是授权依据，不得作为授权判定",
+    "confirmed 仍归漏洞成立五门判定；本契约只约束候选层筛选与 phase 完成可证明性"
+  ],
+  "invariants": [
+    "phases 键与 app init/audit 脚本的三 phase 名逐一相同（APP 33 阶段第 17-19 位，位于 static_dynamic_reconciliation 之后、backend_web_api_testing 之前）",
+    "每 phase branches 与 init/audit 的 substatuses 种子键集逐一相同（附录 B 种子）；skill 脚本自包含复制常量，validate_run_contracts 与测试锁定无漂移",
+    "artifact 路径与施工方案附录 B 种子逐一相同，相对 engagement 工作区根",
+    "rows[].status ∈ finding 8 状态（signal/candidate/needs_manual_validation/confirmed/inconclusive/blocked/rejected/duplicate）；summaries[].branch_status ∈ coverage_substatus 六值",
+    "phase 完成（status=complete/not_applicable）要求：全部分支 substatus 已记录且 ∈ proven_values；产物存在且 contract/phase 字段匹配；summaries 中该分支 branch_status 与 substatus 一致；not_applicable 分支 reason 非空；tested 分支 evidence_ref 可在工作区内解析",
+    "authorization_basis ∈ authorization_basis_values（授权材料/本地流量），不自动创建凭证",
+    "骨架 substatuses 值为空串=未记录，仅完成时强制；审计不得把空串当作 not_applicable"
+  ]
+}

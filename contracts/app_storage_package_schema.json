@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0",
+  "contract": "app_storage_package_schema",
+  "description": "APP 包完整性/加固、本地数据与密码学契约（APP 流施工方案 docs/APP_WORKFLOW_CONSTRUCTION_PLAN.md §4 阶段 10/24/25 + §5.2，批次 B4/W19 上半落地）。package_integrity_hardening_review（MASVS-RESILIENCE，只观察不绕过）＋ local_data_exposure（行内 platform 区分 android/ios）＋ crypto_and_secret_handling 三 phase，每个 phase 产出一份 review JSON 产物（12 键形状：rows=统一筛选模式候选行 8 状态，summaries=分支级汇总，branch_status 为 coverage_substatus 六值之一）。离线复核域：包完整性/加固复核只分析操作员提供的包副本与既有清单证据，不做重打包、篡改、脱壳、绕过 pinning 或设备攻击（APP_NO_REPACKING_RULE）；发现密钥字符串但无法证明有效性时只能是 secret_candidate，不能直接称为密钥泄露漏洞。分支与产物路径的唯一事实源为施工方案附录 B 种子（init/audit 脚本自包含复制）；与本契约的一致性由 scripts/maintenance/validate_run_contracts.py 锁定；src/authorized_assessment/app/ 三模块常量同步在 B5/B6 落地后由 tests/test_app_contract_sync.py 锁定。",
+  "type": "object",
+  "phases": {
+    "package_integrity_hardening_review": {
+      "artifact": "artifacts/app/package/hardening-review.json",
+      "description": "包完整性/加固/更新信任（MASVS-RESILIENCE，离线观察七项）：安装包与 split/xapk 版本清单；签名/证书完整性（v1/v2/v3 scheme、证书指纹）；加固与混淆特征（加固 so 特征只记 signal，不构成结论）；debuggable/allowBackup 等调试开关；日志与调试信息暴露；热更新/dex.zip 下载源与环境切换；客户端是否信任可控更新配置。只观察记录，任何绕过（脱壳/反调试 patch/SSL pinning bypass）= 审批门。",
+      "branches": [
+        "package_version_inventory",
+        "signing_integrity",
+        "hardening_obfuscation_markers",
+        "debug_switches",
+        "debug_info_exposure",
+        "update_endpoint_environment",
+        "trusted_update_config"
+      ]
+    },
+    "local_data_exposure": {
+      "artifact": "artifacts/app/storage/local-data-review.json",
+      "description": "本地数据暴露：token 是否落地（android shared_prefs/sqlite/realm/外部存储/备份 vs ios keychain/plist/快照）；logout 是否清理；本地缓存、数据库、日志、剪贴板、截图、临时文件。行内 platform 列区分 android/ios，只用操作者授权材料与指定测试设备。",
+      "branches": [
+        "token_persistence",
+        "logout_cleanup",
+        "local_cache_database",
+        "logs_clipboard_screenshots",
+        "temp_files"
+      ]
+    },
+    "crypto_and_secret_handling": {
+      "artifact": "artifacts/app/crypto/secret-review.json",
+      "description": "密码学与密钥处理：AppSecret/AK/SK/jpush/umeng/maps key 等硬编码；自定义加密、弱随机数、密钥派生；包中调试配置和环境密钥（调试开关本身归 package_integrity_hardening_review.debug_switches 避免重复计数）。发现密钥字符串但无法证明有效性时只能是 secret_candidate，不能直接称为密钥泄露漏洞。",
+      "branches": [
+        "hardcoded_secrets",
+        "custom_crypto",
+        "weak_random_key_derivation",
+        "debug_config_env_keys"
+      ]
+    }
+  },
+  "coverage_substatus": {
+    "contract_ref": "coverage_substatus_schema",
+    "status_values": ["tested", "not_applicable", "blocked", "approval_required", "needs_manual_validation", "inconclusive"],
+    "proven_values": ["tested", "not_applicable"],
+    "note": "六值枚举与 proven 子集单一来源引用 coverage_substatus_schema（不复定义）。"
+  },
+  "observation_schema_version": "1.0",
+  "artifact_fields": {
+    "row_fields": [
+      "row_id",
+      "branch",
+      "status",
+      "evidence_kinds",
+      "source",
+      "evidence_ref",
+      "precondition",
+      "reason"
+    ],
+    "summary_fields": [
+      "branch",
+      "branch_status",
+      "applicability_counts",
+      "status_counts",
+      "tested_count",
+      "reason",
+      "source",
+      "precondition"
+    ],
+    "artifact_keys": [
+      "schema_version",
+      "contract",
+      "phase",
+      "observation_schema_version",
+      "row_fields",
+      "summary_fields",
+      "substatuses",
+      "rows",
+      "summaries",
+      "violations",
+      "authorization_basis",
+      "updated_at"
+    ]
+  },
+  "authorization_basis_values": ["operator_supplied_material", "local_traffic"],
+  "red_lines": [
+    "APP_NO_REPACKING_RULE：不做重打包、篡改、脱壳、绕过 pinning 或设备攻击；包完整性/加固复核只分析操作员提供的包副本与既有清单证据，加固特征只记 signal",
+    "发现密钥字符串但无法证明有效性时只能是 secret_candidate（未证实线索，8 状态模型记 signal），不能直接称为密钥泄露漏洞；不做 key 有效性探测、不发请求",
+    "仅在有人工提供的授权材料或本地流量/包副本/指定测试设备观察时分析；token、AppSecret、密钥原文等敏感值不复制到普通日志、报告、prompt、ledger 或交接内容",
+    "任何绕过（脱壳/反调试 patch/SSL pinning bypass/frida 注入/重打包）= device_instrumentation/app_hardened_unpack 审批门，双钥匙缺一不可；绕过是测试技术不是漏洞结论",
+    "confirmed 仍归漏洞成立五门判定；本契约只约束候选层筛选与 phase 完成可证明性"
+  ],
+  "invariants": [
+    "phases 键与 app init/audit 脚本的三 phase 名逐一相同（package_integrity_hardening_review 位于 source_reconstruction 后、static_analysis 前；local_data_exposure/crypto_and_secret_handling 位于 business_logic_testing 后、webview_bridge_links 前）",
+    "每 phase branches 与 init/audit 的 substatuses 种子键集逐一相同（附录 B 种子）；skill 脚本自包含复制常量，validate_run_contracts 与测试锁定无漂移",
+    "artifact 路径与施工方案附录 B 种子逐一相同，相对 engagement 工作区根",
+    "rows[].status ∈ finding 8 状态（signal/candidate/needs_manual_validation/confirmed/inconclusive/blocked/rejected/duplicate）；summaries[].branch_status ∈ coverage_substatus 六值；行级 platform 区分（android/ios）由 row 扩展键承载，不破坏 12 键形状",
+    "phase 完成（status=complete/not_applicable）要求：全部分支 substatus 已记录且 ∈ proven_values；产物存在且 contract/phase 字段匹配；summaries 中该分支 branch_status 与 substatus 一致；not_applicable 分支 reason 非空；tested 分支 evidence_ref 可在工作区内解析",
+    "调试开关与'包中调试配置和环境密钥'去重分配：调试开关归 package_integrity_hardening_review.debug_switches，crypto_and_secret_handling.debug_config_env_keys 只覆盖环境密钥/调试配置中的密钥材料暴露，不得重复计数",
+    "骨架 substatuses 值为空串=未记录，仅完成时强制；审计不得把空串当作 not_applicable"
+  ]
+}

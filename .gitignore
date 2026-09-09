@@ -3,6 +3,12 @@ auth_sessions.local.json
 **/auth_sessions.local.json
 sessions.jsonl
 **/sessions.jsonl
+
+# Session-tool workspace and local lab/experiment outputs (never project code)
+.zcode/
+sqli_labs_results/
+dir_file_path.txt
+vuln_*_dvwa_test.txt
 *.cookies.local.json
 *.headers.local.json
 *.local.json

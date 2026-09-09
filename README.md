@@ -1,71 +1,92 @@
-# 攻防演练辅助项目入口
+# 授权安全演练辅助平台
 
-这个项目的定位是：把授权范围内的目标整理成低频、只读、证据友好的复核流程，帮你更快找到“值得人工确认”的接口泄露、越权、产品漏洞候选、弱口令入口和报告素材。
+**当前版本：[v3.2](https://github.com/dreamacto/Information-Gathering/releases/tag/v3.2)**（APP 流程闭环） · 全部版本号见 [Releases](https://github.com/dreamacto/Information-Gathering/releases) · 版本对照表见 [`docs/VERSIONS.md`](docs/VERSIONS.md)
 
-## 项目结构
+把**已授权**的 SRC / 护网 / 攻防演练目标，整理成低速、只读、证据导向的评估流水线：受控候选筛查 → 单目标确认编排 → 证据与质量门 → 人工终审与报告。
 
-仓库的归类地图、入口规范、代码放置规则和本地资产边界见 [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md)。
+> 这不是全量漏扫器，也不是自动化利用器。产出不是"扫到了多少条"，而是：哪些目标确实在授权范围内、哪些线索值得人工确认、哪些阶段实际执行过、证据是否可复现、下一轮该测什么。
 
-- 新的 Windows 入口统一放在 `launchers/`；根目录同名 BAT/CMD 仅用于兼容旧快捷方式。
-- 生产 Python 文件当前保留根目录兼容路径，避免破坏既有裸导入；新模块不要继续堆到根目录。
-- `runs/`、`engagements/`、`reports/`、`outputs/`、`tools/` 和 `unpacked/` 是本地资产，不要提交。
-- 根目录逐文件归类清单：`docs/ROOT_FILE_CLASSIFICATION.json`。
+---
 
+## 三大工作流 + 复核闭环
 
-桌面批处理是最适合新手的一键入口：
+| 流程 | 输入 | 游标 | 用途 |
+|---|---|---|---|
+| **WZ** 网站/API | 域名、URL、run 目录 | `phase_status.json` | 子域→存活→指纹→接口/产品/注入候选→认证态复核 |
+| **XCX** 小程序 | 名称、AppID、wxapkg、缓存、流量 | `phase_status.miniapp.json` | 解密解包→源码恢复→认证/云/第三方边界 |
+| **APP** 移动应用（v3.2 新增） | APK/IPA/XAPK、包名、市场链接、已解包目录、流量 | `phase_status.app.json` | 解包反编译（apktool/jadx）→静态分析→认证/本地存储/IPC/云边界，对照 OWASP MASTG/MASVS |
 
-- `D:\Desktop\一键保守全流程_尽量多信息_避WAF.bat`：推荐优先用。低频、信息收集更完整、尽量少触发 WAF。
-- `D:\Desktop\一键完整流程_含弱口令.bat`：完整流程，包含显式弱口令复核。
-- `D:\Desktop\一键已有子域名后流程_含弱口令.bat`：你已经有子域名文件时，从存活、指纹、接口、产品候选开始跑。
-- `D:\Desktop\小程序Burp导入到最近一次流程.bat`：把你从 Burp 复制/导出的微信小程序后端 URL 导入最近一次流程。
-- `D:\Desktop\启动浏览器XHR采集_本地复现版.bat`：需要浏览器里登录并采集接口时使用。
+每个流程独立 engagement 工作区（`engagements/<目标-日期>/`），**一次只推进一个阶段**，游标与阶段记录写盘后询问"继续本会话还是交接"。配套会话：FH 运行后复核（`fh_review_dispatch.py`）、B 规划、D 逻辑/竞态、F 白盒 sink、E 周度沉淀、Z 验收——统一由 `prompts/配方P_提示词分发员.md` 路由。
 
-项目内主入口是：
+## 安全边界（摘要，全文见 [`ROE.md`](ROE.md)）
+
+- **授权前提**：只处理当前授权文档/目标清单覆盖的资产；新发现域名、小程序后端、第三方路径先进归属确认队列。
+- **默认动作**：只读、低速（同 host 串行、间隔 ≥2s、429/5xx 退避）、本地离线解析优先；候选 ≠ 漏洞。
+- **审批门（双钥匙）**：弱口令、SQLMap、上传/导出/事务、命令执行、竞态写、SSRF 主动验证、设备 root/越狱、frida 注入、SSL pinning bypass、加固脱壳——脚本审批门 + 会话内人工确认，缺一不可。
+- **禁止动作**：password_spray / bruteforce / webshell / c2 / tunnel / data_export / destructive_write / ddos / social_engineering / near_field。
+- **凭证纪律**：Cookie/Token/密钥只存本地 `*.local.*` 文件，不进报告、日志、台账、git。
+- **停止条件**：窗口关闭、服务劣化、范围外资产、WAF 告警迹象——立即停手并报告。
+
+## 快速开始（Windows）
 
 ```powershell
-<python.exe> .\gov_exercise_runner.py --targets <目标文件> --probe --fingerprint --tool-fingerprint --high-value-paths --api-discovery --api-confirm --sqli-triage --shiro-triage --delay 3
-```
+:: 低速只读全流程（推荐）
+launchers\一键保守全流程_尽量多信息_避WAF.bat
 
-跑完后先看：
+:: 或主编排器
+python .\gov_exercise_runner.py --targets <目标文件> --probe --fingerprint --high-value-paths --api-discovery --api-confirm --delay 3
 
-```text
+:: 跑完先看
 runs\<本轮目录>\00_重要_人工复核入口\README_先看这里.md
+
+:: run 完成态查询（跑完了吗/下一步是什么）
+python .\run_lifecycle.py runs\<本轮目录>
 ```
 
-### 复核与单目标深挖（2026-08-25 起的标准循环）
+更多入口：`launchers\`（一键完整/已有子域名/并行分批/小程序 Burp 导入/全目标作战台），根目录同名 BAT 仅为兼容转发。AI 会话配方用桌面 `AI配方_一键复制.bat`（菜单 1–12：配方 A–F/P/R/WZ/XCX/APP/Z）。
+
+## 仓库地图
 
 ```text
-一键流程跑完 → 复核流程（配方A会话）→ 复核收尾跑深挖推荐 → 逐个拍板选目标 → 单目标网站流程（wz, 跳过子域扫描）
+gov_exercise_runner.py        主编排器（21 阶段 WZ 主流程）
+run_lifecycle.py              run 完成态推导
+fh_review_dispatch.py         FH 复核批次编排 + 深挖推荐
+src/authorized_assessment/    包结构：orchestration / triage / miniapp / app / analysis / tools
+contracts/                    JSON Schema 与流程契约（含 app_* 七件）
+.agents/skills/               wZ/XCX/app/FH 等 skill canonical（.claude/.opencode 为镜像）
+prompts/                      AI 会话配方 A–F/P/R/WZ/XCX/APP/Z
+launchers/                    Windows 规范启动器
+knowledge_base/               指纹记忆/漏洞模式/假设台账/sink 库（离线沉淀）
+tests/                        pytest（离线验收基线）
+docs/                         结构/规则/方案/验收/版本表
+runs/ engagements/ tools/ unpacked/   本地资产（git 忽略，不入库）
 ```
 
-- 复核收尾推荐：`python fh_review_dispatch.py --run-dir <run目录> --recommend --top 5` → 生成 `postrun_review\深挖推荐.md`
-- 桌面 `AI配方_一键复制.bat` 现在直接复制 WZ 网站流程、XCX 小程序流程或 APP 移动应用流程；配方 P 现为统一评估流程路由器；WZ/XCX/APP 同时提供直接快捷入口。
+## 文档索引
 
-## 输出怎么读
+| 文档 | 内容 |
+|---|---|
+| [`AGENTS.md`](AGENTS.md) | AI 会话入口：定位/边界/上下文纪律/运行时表 |
+| [`ROE.md`](ROE.md) | 交战规则唯一事实源：授权/速率/动作分级/凭证/停止条件 |
+| [`docs/RULE_PRECEDENCE.md`](docs/RULE_PRECEDENCE.md) | 规则冲突时的唯一优先级 |
+| [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md) | 目录归类与入口规范 |
+| [`docs/VERSIONS.md`](docs/VERSIONS.md) | v1 → v3.2 全部版本对照 |
+| [`docs/APP_WORKFLOW_CONSTRUCTION_PLAN.md`](docs/APP_WORKFLOW_CONSTRUCTION_PLAN.md) | APP 流程施工蓝图（33 阶段/批次/附录） |
+| [`docs/APP_CONSTRUCTION_ACCEPTANCE.md`](docs/APP_CONSTRUCTION_ACCEPTANCE.md) | APP 流程 B1–B9 验收台账 |
+| [`AGENT_MANIFEST.md`](AGENT_MANIFEST.md) | 机器可读工具清单（生成物，勿手改） |
 
-- `00_重要_人工复核入口\01_需要你登录拿Cookie.md`：需要你手动登录/注册/拿 Cookie 的目标。
-- `00_重要_人工复核入口\02_业务API只读复核队列.md`：最贴近接口泄露、越权、未授权访问的队列。
-- `00_重要_人工复核入口\04B_产品漏洞候选队列.md`：Fastjson、Log4j、Struts2、Spring Boot、Nacos、ThinkPHP、泛微、致远、用友等候选，只排队不利用。
-- `reports\screenshot_queue.md`：报告截图队列。
-- `evidence\screenshots\截图队列_一键采集.bat`：只对公开页面做低频截图，不带 Cookie，不保存响应正文。
-- `targets_with_auto_subdomains.txt`：子域名爆破结果和原目标自动合并后的下一轮目标文件。
+## 离线验收
 
-## 子域名回流
-
-完整流程会低频 DNS 爆破子域名。发现的同主域名候选不会在同一轮立刻 HTTP 探测，而是自动写入：
-
-```text
-runs\<本轮目录>\targets_with_auto_subdomains.txt
+```powershell
+python -m pytest -q                                # 全量测试
+python scripts/verify_offline.py --json            # 编译+漂移+测试
+python scripts/maintenance/validate_run_contracts.py   # 契约↔引擎↔种子同源
+python scripts/check_skill_drift.py                # skill 三镜像一致
+python scripts/maintenance/rebuild_tool_inventory.py --check   # 工具登记一致性
 ```
 
-下一轮直接把这个文件拖给一键流程即可。
+以上全部只做本地检查，不连接真实目标。
 
-## 安全边界
+---
 
-- 默认只做低频、只读、元数据级检查。
-- 已明确登记为**域级授权根域**的目标（例如 `abc.com`）可自动覆盖合法子域（例如 `123.abc.com`）；精确子域、兄弟域、`evilabc.com`、`abc.com.evil.com`、第三方/平台共享 host 不会自动纳入。
-- 自动纳入只解决 scope 继承，仍必须通过当前 engagement 的授权和 active-testing 门；`targets_with_auto_subdomains.txt` 不能绕过 policy gate。
-- Cookie、Token、响应正文、敏感字段值不写入报告素材。
-- 弱口令只有显式流程才会跑，并且低频、少量、遇到验证码/锁定/告警就停。
-- 上传、SQLMap、RCE、反序列化、Shiro key 爆破、文件下载/导出、批量枚举、改删数据都需要演练规则明确允许后再单目标执行。
-- 旧脚本很多是历史实验脚本，不建议作为主流程入口。先看 `LEGACY_UNSAFE_NOT_MAIN.md`。
+**纪律提醒**：所有网络访问必须经过授权范围、速率控制与审批门；`runs/`、`engagements/`、凭证与真实目标材料永远不入库。历史实验脚本见 `legacy/`，不作为主流程入口。
